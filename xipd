@@ -7,6 +7,10 @@
 #
 # I spot checked the report against the IBIS package files. If used for
 # routing, I suggest you do the same.
+#
+# I wrote the design doc in the README.md, including the delay and length
+# calculations (with help from ChatGPT). The design doc served as the blueprint
+# and context for Claude's work here.
 
 import argparse
 import sys

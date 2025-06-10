@@ -37,28 +37,31 @@ Per pin package delays are computed from Xilinx's published IBIS files.
 
 There are 2 ways to calculate the per pin delays:
 
-#### Lumped LC Delay Approximation
+Lumped LC Delay Approximation:
 
-```
-t_delay ≈ √(L × C)
+```math
+t_{\text{delay}} \approx \sqrt{L \cdot C}
 ```
 
-#### Elmore Delay (RC Dominated)
+Elmore Delay (RC Dominated):
 
+```math
+t_{\text{delay}} \approx 0.69 \cdot R \cdot C
 ```
-t_delay ≈ 0.69 × R × C
-```
+
+<br>
 
 I am not an EE, but AI says to use Lumped LC Delay Approximation because:
 
-* Inductance and capacitance dominate at high speeds (>100 MHz),
+- Inductance and capacitance dominate at high speeds (>100 MHz),
   especially for short interconnects like those in a package.
-* Resistance has minimal effect on propagation delay (it contributes more
+- Resistance has minimal effect on propagation delay (it contributes more
   to signal attenuation than timing).
-* The die-to-pad connection behaves like a lumped LC structure,
+- The die-to-pad connection behaves like a lumped LC structure,
   not an RC delay line.
 
-> [!Caution] TODO: validate this on Reddit
+> [!Caution]
+> TODO: validate this on Reddit
 
 ### Individual v.s. Mutual Inductance and Capacitance
 
@@ -69,3 +72,115 @@ require knowing signal details of the other pins. Further, AI indicated that
 the basic calculations using individual pin data v.s. mutual pin data would be
 measured in fractions of a picosecond. For purposes of delay w calculations, this
 is negligible. It is also well beyond the PCB manufacturing tolerance.
+
+### Length Calculation
+
+The delay computed above must be converted to units of length for use in KiCad.
+This means calculating both the stripline and microstrip lengths so that
+the appropriate value can be used depending on which layer the signal is routed
+on.
+
+#### Propagation Delay – General Formula
+
+The propagation delay per unit length is given by:
+
+```math
+t_d = \frac{\sqrt{\varepsilon_{\text{eff}}}}{c}
+```
+
+Where:
+
+- t_d: propagation delay (s/m)
+- ε_eff: effective dielectric constant
+- c: speed of light ≈ 3 × 10⁸ m/s
+
+#### Stripline
+
+In a stripline (a trace fully embedded in dielectric), the electromagnetic
+fields are entirely contained within the dielectric. So:
+
+```math
+\varepsilon_{\text{eff}} = \varepsilon_r
+```
+
+<br>
+
+For example, JLC06161H-3313, a common 6 layer controlled impedance stackup
+at JLCPCB has a dielectric constant of 4.16.
+
+therefore:
+
+```math
+\varepsilon_{\text{eff}} = \varepsilon_r = 4.16
+```
+
+```math
+t_d = \frac{\sqrt{\varepsilon_{\text{eff}}}}{c}
+```
+
+```math
+t_d = \frac{\sqrt{4.16}}{3 \times 10^8}
+     \approx 6.799 \times 10^{-9} \text{ s/m}
+```
+
+<br>
+
+```math
+t_d \approx 6.8 \, \text{ps/mm}
+```
+
+#### Microstrip
+
+The effective dielectric constant `ε_eff` for a microstrip (air above,
+dielectric below) is approximated by:
+
+```math
+\varepsilon_{\text{eff}} =
+  \frac{\varepsilon_r + 1}{2} + \frac{\varepsilon_r - 1}{2}
+  \cdot
+  \frac{1}{\sqrt{1 + 12 \cdot \frac{h}{w}}}
+```
+
+Where:
+
+- `ε_r` = Relative permittivity (dielectric constant) of the substrate
+- `h` = Height of the dielectric (distance from trace to reference plane)
+- `w` = Width of the microstrip trace
+- (All dimensions must use the same unit, e.g., mm or mils)
+
+Given the same JLCPCB JLC06161H-3313 stackup used above, a 4.16 dielectric
+constant, a prepreg thickness of 3.91mil, and a trace width of
+6.16mil[^2], we have:
+
+[^2]: This is the trace width for a 50ohm impedance for this stackup, per
+the JLCPCB impedance calculator.
+
+```math
+\varepsilon_{\text{eff}} =
+  \frac{4.16 + 1}{2} +
+  \frac{4.16 - 1}{2} \cdot
+  \frac{1}{\sqrt{1 + 12 \cdot \frac{3.91}{6.16}}}
+```
+
+```math
+\varepsilon_{\text{eff}} =
+  \approx 3.12
+```
+
+```math
+t_d = \frac{\sqrt{3.12}}{3 \times 10^8}
+    \approx 5.89 \times 10^{-9} \text{ s/m}
+```
+
+<br>
+
+```math
+t_d \approx 5.89 \, \text{ps/mm}
+
+```
+
+<br>
+
+>[!Note]
+> For this stackup, and trace geometry, stripline is roughly 15% slower than
+> microstrip.
