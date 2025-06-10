@@ -26,7 +26,7 @@ delay matching in KiCad. It appears that KiCad is changing to time based
 delay matching, see: <https://gitlab.com/kicad/code/kicad/merge_requests/2212>. However, as I understand the KiCad release schedule, this won't be available
 in a stable release until early 2026.
 
-## Design Overview
+## Design
 
 The following are my design notes, and also serve as AI context in developing
 the utility.
@@ -184,3 +184,13 @@ t_d \approx 5.89 \, \text{ps/mm}
 >[!Note]
 > For this stackup, and trace geometry, stripline is roughly 15% slower than
 > microstrip.
+
+#### Propagation Delay to Length
+
+The user provides the dielectric constant, prepeg height, and trace width.
+The formulas defined above are used to calculate the propagation delay and
+then converted to lengths using:
+
+```math
+\ell = \frac{t}{t_d}
+```
