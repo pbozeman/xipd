@@ -1,0 +1,180 @@
+#!/usr/bin/env python3
+
+# ✨🤖✨Vibe coded with Claude
+
+import argparse
+import sys
+from pathlib import Path
+import re
+
+
+def parse_args():
+    parser = argparse.ArgumentParser(
+        description="Compute package delays for Xilinx chips from IBIS files."
+    )
+
+    parser.add_argument(
+        "package_file",
+        type=Path,
+        help="Path to the package file (e.g., 'ibis_files/artix7/xa7a12t_csg325.pkg')",
+    )
+
+    return parser.parse_args()
+
+
+def parse_pin_numbers(file_path):
+    """Parse the pin numbers section to extract pin to net mapping."""
+    pin_map = {}
+    in_pin_numbers = False
+
+    with open(file_path, "r") as f:
+        for line in f:
+            line = line.strip()
+
+            # Check if we're entering or leaving the Pin Numbers section
+            if line == "[Pin Numbers]":
+                in_pin_numbers = True
+                continue
+            elif in_pin_numbers and line.startswith("[") and line != "[Pin Name]":
+                in_pin_numbers = False
+                continue
+
+            # Skip comments, empty lines, and header
+            if (
+                not in_pin_numbers
+                or not line
+                or line.startswith("|")
+                or line.startswith("[Pin Name]")
+            ):
+                continue
+
+            # Parse pin and net information
+            parts = line.split()
+            if len(parts) >= 3:  # Need at least pin name, net number, and net name
+                pin_name = parts[0]
+
+                # Find the net number position (preceded by '|')
+                net_number_pos = -1
+                for i, part in enumerate(parts):
+                    if part == "|":
+                        net_number_pos = i
+                        break
+
+                if net_number_pos >= 0 and net_number_pos + 2 < len(parts):
+                    # The net name is typically after the net number
+                    net_name = parts[net_number_pos + 2]
+                    pin_map[pin_name] = net_name
+
+    return pin_map
+
+
+def parse_matrix_data(file_path, matrix_type):
+    """Parse inductance or capacitance matrix data."""
+    values = {}
+    in_matrix = False
+    current_row = None
+
+    with open(file_path, "r") as f:
+        for line in f:
+            line = line.strip()
+
+            # Check if we're entering the matrix section
+            if line.startswith(f"[{matrix_type} Matrix]"):
+                in_matrix = True
+                continue
+            elif in_matrix and line.startswith("[") and not line.startswith("[Row]"):
+                in_matrix = False
+                continue
+
+            # Skip comments and empty lines
+            if not in_matrix or not line or line.startswith("|"):
+                continue
+
+            # Skip "Sparse_matrix" line
+            if "Sparse_matrix" in line:
+                continue
+
+            # Check for row header
+            if line.startswith("[Row]"):
+                parts = line.split()
+                if len(parts) > 1:
+                    current_row = parts[1]
+                continue
+
+            # Parse values
+            if current_row:
+                parts = line.split()
+                if len(parts) >= 2:
+                    col_name = parts[0]
+                    try:
+                        value = float(parts[1])
+
+                        # For diagonal elements (self-inductance/capacitance)
+                        if col_name == current_row:
+                            values[col_name] = value
+                    except ValueError:
+                        pass
+
+    return values
+
+
+def calculate_delays(inductances, capacitances):
+    """Calculate delays using the LC delay approximation: t_delay ≈ √(L × C)."""
+    delays = {}
+
+    for pin in set(inductances.keys()) & set(capacitances.keys()):
+        L = inductances[pin]
+        C = capacitances[pin]
+        # Calculate delay in seconds, convert to picoseconds
+        delay_ps = 1e12 * (L * C) ** 0.5
+        delays[pin] = delay_ps
+
+    return delays
+
+
+def calculate_trace_length(delay_ps, er):
+    """Calculate trace length in mm from delay (ps) and dielectric constant (Er).
+
+    The calculation is based on the speed of light in the dielectric:
+    v = c / sqrt(Er)
+    length = v * delay_time
+    """
+    speed_of_light = 299792458  # meters per second
+    delay_s = delay_ps * 1e-12  # convert ps to seconds
+
+    # Calculate the speed in the dielectric
+    v = speed_of_light / (er**0.5)
+
+    # Calculate trace length in millimeters
+    length_mm = v * delay_s * 1000
+
+    return length_mm
+
+
+def main():
+    args = parse_args()
+
+    # Verify the package file exists
+    if not args.package_file.exists():
+        print(f"Error: Package file not found: {args.package_file}", file=sys.stderr)
+        return 1
+
+    print(f"Processing package file: {args.package_file}")
+
+    # Parse pin mapping
+    pin_map = parse_pin_numbers(args.package_file)
+    print(f"Found {len(pin_map)} pins in the pin map")
+
+    # Print pins from the pin map
+    print("\nPin to Net Mapping:")
+    print("Pin Name\tNet Name")
+    print("-" * 30)
+
+    for pin, net in sorted(pin_map.items()):
+        print(f"{pin}\t\t{net}")
+
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
