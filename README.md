@@ -194,3 +194,9 @@ then converted to lengths using:
 ```math
 \ell = \frac{t}{t_d}
 ```
+
+Where:
+
+- ℓ: equivalent PCB track length for the die to pad delay
+- t: die to pad delay computed using the LC Delay Approximation
+- t_d: propagation delay computed from stackup and trace geometry
