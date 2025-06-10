@@ -164,14 +164,28 @@ def main():
     # Parse pin mapping
     pin_map = parse_pin_numbers(args.package_file)
     print(f"Found {len(pin_map)} pins in the pin map")
+    
+    # Parse inductance and capacitance matrices
+    inductances = parse_matrix_data(args.package_file, "Inductance")
+    capacitances = parse_matrix_data(args.package_file, "Capacitance")
+    
+    print(f"Found {len(inductances)} self-inductance values")
+    print(f"Found {len(capacitances)} self-capacitance values")
 
-    # Print pins from the pin map
-    print("\nPin to Net Mapping:")
-    print("Pin Name\tNet Name")
-    print("-" * 30)
+    # Print pin data with net name, inductance, and capacitance
+    print("\nPin Data:")
+    print("Pin Name  Net Name                     Inductance (H)  Capacitance (F)")
+    print("-" * 75)
 
-    for pin, net in sorted(pin_map.items()):
-        print(f"{pin}\t\t{net}")
+    for pin in sorted(pin_map.keys()):
+        net = pin_map.get(pin, "N/A")
+        inductance = inductances.get(pin, "N/A")
+        capacitance = capacitances.get(pin, "N/A")
+        
+        if isinstance(inductance, float) and isinstance(capacitance, float):
+            print(f"{pin:<9}{net:<30}{inductance:<15.3e}{capacitance:<.3e}")
+        else:
+            print(f"{pin:<9}{net:<30}{'N/A':<15}{'N/A'}")
 
     return 0
 
