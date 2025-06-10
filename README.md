@@ -185,6 +185,14 @@ t_d \approx 5.89 \, \text{ps/mm}
 > For this stackup, and trace geometry, stripline is roughly 15% slower than
 > microstrip.
 
+> [!Caution]
+> TODO: the microstrip calculation assumes air above the trace. Double
+> check if using a dielectric constant for soldermask makes a substantial
+> difference in the results. JLCPCB provides some values on
+> <https://jlcpcb.com/impedance>, but it is not immediately clear how these
+> should be used and/or if they are so thin that both air and solder mask
+> should be considered together.
+
 #### Propagation Delay to Length
 
 The user provides the dielectric constant, prepeg height, and trace width.
