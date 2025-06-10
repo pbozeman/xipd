@@ -1,6 +1,12 @@
 #!/usr/bin/env python3
 
 # ✨🤖✨Vibe coded with Claude
+#
+# I didn't edit a single line of this code, other than this comment,
+# and only did the most minimal of code review.
+#
+# I spot checked the report against the IBIS package files. If used for
+# routing, I suggest you do the same.
 
 import argparse
 import sys
@@ -164,28 +170,51 @@ def main():
     # Parse pin mapping
     pin_map = parse_pin_numbers(args.package_file)
     print(f"Found {len(pin_map)} pins in the pin map")
-    
+
     # Parse inductance and capacitance matrices
     inductances = parse_matrix_data(args.package_file, "Inductance")
     capacitances = parse_matrix_data(args.package_file, "Capacitance")
-    
+
     print(f"Found {len(inductances)} self-inductance values")
     print(f"Found {len(capacitances)} self-capacitance values")
 
-    # Print pin data with net name, inductance, and capacitance
+    # Calculate delays
+    delays = calculate_delays(inductances, capacitances)
+    print(f"Calculated delays for {len(delays)} pins")
+
+    # Print pin data with delay, net name, inductance, and capacitance
     print("\nPin Data:")
-    print("Pin Name  Net Name                     Inductance (H)  Capacitance (F)")
-    print("-" * 75)
+
+    # Explicitly define the column widths to match the headers
+    col1_width = 10  # Pin Name
+    col2_width = 12  # Delay (ps)
+    col3_width = 30  # Net Name
+    col4_width = 16  # Inductance (H)
+
+    # Print header with explicit spacing
+    print(
+        f"{'Pin Name':<{col1_width}}{'Delay (ps)':<{col2_width}}{'Net Name':<{col3_width}}{'Inductance (H)':<{col4_width}}{'Capacitance (F)'}"
+    )
+    print("-" * 90)
 
     for pin in sorted(pin_map.keys()):
         net = pin_map.get(pin, "N/A")
         inductance = inductances.get(pin, "N/A")
         capacitance = capacitances.get(pin, "N/A")
-        
-        if isinstance(inductance, float) and isinstance(capacitance, float):
-            print(f"{pin:<9}{net:<30}{inductance:<15.3e}{capacitance:<.3e}")
+        delay = delays.get(pin, "N/A")
+
+        if (
+            isinstance(inductance, float)
+            and isinstance(capacitance, float)
+            and isinstance(delay, float)
+        ):
+            print(
+                f"{pin:<{col1_width}}{delay:<{col2_width}.2f}{net:<{col3_width}}{inductance:<{col4_width}.3e}{capacitance:.3e}"
+            )
         else:
-            print(f"{pin:<9}{net:<30}{'N/A':<15}{'N/A'}")
+            print(
+                f"{pin:<{col1_width}}{'N/A':<{col2_width}}{net:<{col3_width}}{'N/A':<{col4_width}}{'N/A'}"
+            )
 
     return 0
 
