@@ -350,6 +350,12 @@ def main():
         stripline_delay = calculate_propagation_delay(stripline_eff_er)
         microstrip_delay = calculate_propagation_delay(microstrip_eff_er)
 
+        # Always display propagation delay in ps/mm regardless of output units
+        propagation_unit = "ps"
+        # Convert from s/m to ps/mm
+        stripline_delay_mm = stripline_delay * 1e12 / 1000  # ps/mm
+        microstrip_delay_mm = microstrip_delay * 1e12 / 1000  # ps/mm
+
         # Print stack-up information
         print(f"\nPCB Stack-up Parameters:")
         print(f"  Dielectric Constant (εr): {args.dielectric_constant:.2f}")
@@ -358,8 +364,8 @@ def main():
         print(f"  Height/Width Ratio: {args.prepreg_height/args.trace_width:.3f}")
         print(f"  Effective Dielectric (Stripline): {stripline_eff_er:.2f}")
         print(f"  Effective Dielectric (Microstrip): {microstrip_eff_er:.2f}")
-        print(f"  Propagation Delay (Stripline): {stripline_delay * 1e12:.2f} ps/m")
-        print(f"  Propagation Delay (Microstrip): {microstrip_delay * 1e12:.2f} ps/m")
+        print(f"  Propagation Delay (Stripline): {stripline_delay_mm:.2f} ps/mm")
+        print(f"  Propagation Delay (Microstrip): {microstrip_delay_mm:.2f} ps/mm")
 
     # Print pin data with delay, net name, inductance, and capacitance
     print("\nPin Data:\n")
