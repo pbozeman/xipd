@@ -9,6 +9,14 @@ GTP traces.
 
 ## Usage
 
+Download IBIS files for your package. The can be found in the left side
+navigation under IBIS Models at <https://www.xilinx.com/support/download/index.html/content/xilinx/en/downloadNav/device-models.html>.
+
+Unzip the models and run against the pkg file for the desired package.
+
+The only required parameter is the pkg file name. If the stackup and
+trace geometry is not provided, only on package timing delays are reported.
+
 Example:
 
 ```bash
