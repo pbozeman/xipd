@@ -1,6 +1,55 @@
 # Xilinx IBIS Package Delay
 
-Compute package delays for Xilinx chips from IBIS files.
+Compute package delays for Xilinx chips from IBIS files, including converting
+them to lengths that can be used in KiCad track tuning.
+
+For the microstrip use case, run the tool multiple times if different trace
+widths are needed, e.g. 50ohm for DDR3 and 100ohm differential pairs for
+GTP traces.
+
+## Usage
+
+Example:
+
+```bash
+python3 xipd ibis_files/artix7/xc7a50t_fgg484.pkg \
+             --dielectric-constant 4.16           \
+             --prepreg-height 3.91                \
+             --trace-width 6.16                   \
+             --output-units mils
+```
+
+Results:
+
+```text
+Processing package file: ibis_files/artix7/xc7a50t_fgg484.pkg
+Found 303 pins in the pin map
+Found 303 self-inductance values
+Found 303 self-capacitance values
+Calculated delays for 303 pins
+
+PCB Stack-up Parameters:
+  Dielectric Constant (εr): 4.16
+  Prepreg Height: 3.91
+  Trace Width: 6.16
+  Height/Width Ratio: 0.635
+  Effective Dielectric (Stripline): 4.16
+  Effective Dielectric (Microstrip): 3.12
+  Propagation Delay (Stripline): 6803.40 ps/m
+  Propagation Delay (Microstrip): 5890.26 ps/m
+
+Pin Data:
+
+Pin   Delay    Stripline    Microstrip   Net Name                      Inductance  Capacitance
+      (ps)     (mils)       (mils)                                     (H)         (F)
+-----------------------------------------------------------------------------------------------
+A1    121.35   702.2        811.1        IO_L1N_T0_AD4N_35             1.069e-08   1.378e-12
+A10   69.29    401.0        463.1        MGTPRXN2_216                  6.657e-09   7.212e-13
+A13   128.75   745.0        860.5        IO_L10P_T1_16                 1.092e-08   1.518e-12
+A14   114.22   661.0        763.5        IO_L10N_T1_16                 9.622e-09   1.356e-12
+
+....
+```
 
 ## Overview
 
