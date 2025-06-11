@@ -14,8 +14,12 @@
 
 import argparse
 import sys
+import signal
 from pathlib import Path
 import re
+
+# Handle broken pipe gracefully (when output is piped to head, less, etc.)
+signal.signal(signal.SIGPIPE, signal.SIG_DFL)
 
 
 def parse_args():
@@ -27,6 +31,36 @@ def parse_args():
         "package_file",
         type=Path,
         help="Path to the package file (e.g., 'ibis_files/artix7/xa7a12t_csg325.pkg')",
+    )
+
+    # PCB stack-up parameters for length calculation
+    length_group = parser.add_argument_group(
+        "PCB Stack-up Parameters for Length Calculation"
+    )
+    length_group.add_argument(
+        "--dielectric-constant",
+        "-d",
+        type=float,
+        help="Dielectric constant (εr) of the PCB substrate",
+    )
+    length_group.add_argument(
+        "--prepreg-height",
+        "-p",
+        type=float,
+        help="Height of prepreg (distance from trace to reference plane) - use same units as trace width",
+    )
+    length_group.add_argument(
+        "--trace-width",
+        "-w",
+        type=float,
+        help="Width of the microstrip trace - use same units as prepreg height",
+    )
+    length_group.add_argument(
+        "--output-units",
+        "-o",
+        choices=["mm", "mils"],
+        default="mils",
+        help="Units for output trace lengths (default: mils)",
     )
 
     return parser.parse_args()
@@ -142,23 +176,98 @@ def calculate_delays(inductances, capacitances):
     return delays
 
 
-def calculate_trace_length(delay_ps, er):
-    """Calculate trace length in mm from delay (ps) and dielectric constant (Er).
+def convert_length_units(value, from_unit, to_unit):
+    """Convert a length value between units.
 
-    The calculation is based on the speed of light in the dielectric:
-    v = c / sqrt(Er)
-    length = v * delay_time
+    Args:
+        value: The value to convert
+        from_unit: Source unit ("mm" or "mils")
+        to_unit: Target unit ("mm" or "mils")
+
+    Returns:
+        The value in the target unit
+    """
+    if from_unit == to_unit:
+        return value
+
+    # Convert to mm if needed
+    if from_unit == "mils":
+        value_mm = value * 0.0254  # 1 mil = 0.0254 mm
+    else:
+        value_mm = value
+
+    # Convert from mm to target unit if needed
+    if to_unit == "mils":
+        return value_mm / 0.0254  # Convert mm to mils
+    else:
+        return value_mm  # Already in mm
+
+
+def calculate_stripline_effective_dielectric(er):
+    """Calculate effective dielectric constant for stripline.
+
+    For stripline, effective dielectric constant equals the substrate's dielectric constant.
+    """
+    return er
+
+
+def calculate_microstrip_effective_dielectric(er, h, w):
+    """Calculate effective dielectric constant for microstrip.
+
+    Args:
+        er: Dielectric constant of substrate
+        h: Height of dielectric (distance from trace to ground plane)
+        w: Width of the trace
+
+    Note: h and w must be in the same units
+
+    Returns:
+        Effective dielectric constant for microstrip
+    """
+    # For microstrip, use the approximation formula
+    # Note: h/w is a ratio, so units cancel out as long as they're the same
+    return (er + 1) / 2 + (er - 1) / 2 * (1 / (1 + 12 * h / w) ** 0.5)
+
+
+def calculate_propagation_delay(effective_dielectric):
+    """Calculate propagation delay per unit length.
+
+    Args:
+        effective_dielectric: Effective dielectric constant
+
+    Returns:
+        Propagation delay in seconds per meter
     """
     speed_of_light = 299792458  # meters per second
-    delay_s = delay_ps * 1e-12  # convert ps to seconds
+    # Calculate delay as t_d = sqrt(ε_eff) / c
+    return (effective_dielectric**0.5) / speed_of_light
 
-    # Calculate the speed in the dielectric
-    v = speed_of_light / (er**0.5)
 
-    # Calculate trace length in millimeters
-    length_mm = v * delay_s * 1000
+def calculate_trace_length(delay_ps, propagation_delay_s_m, output_unit="mm"):
+    """Calculate trace length from delay and propagation delay.
 
-    return length_mm
+    Args:
+        delay_ps: Package delay in picoseconds
+        propagation_delay_s_m: Propagation delay in seconds per meter
+        output_unit: Output unit, either "mm" or "mils"
+
+    Returns:
+        Equivalent trace length in specified unit
+    """
+    # Convert delay from ps to seconds
+    delay_s = delay_ps * 1e-12
+
+    # Calculate length in meters
+    length_m = delay_s / propagation_delay_s_m
+
+    # Convert to mm first
+    length_mm = length_m * 1000
+
+    # Convert to requested output unit
+    if output_unit == "mils":
+        return convert_length_units(length_mm, "mm", "mils")
+    else:
+        return length_mm
 
 
 def main():
@@ -186,20 +295,98 @@ def main():
     delays = calculate_delays(inductances, capacitances)
     print(f"Calculated delays for {len(delays)} pins")
 
+    # Initialize variables for length calculations
+    calculate_lengths = False
+    stripline_delay = None
+    microstrip_delay = None
+
+    # Check if PCB stack-up parameters are provided for length calculations
+    if args.dielectric_constant is not None and all(
+        p is not None for p in [args.prepreg_height, args.trace_width]
+    ):
+        calculate_lengths = True
+
+        # Calculate effective dielectric constants
+        stripline_eff_er = calculate_stripline_effective_dielectric(
+            args.dielectric_constant
+        )
+        microstrip_eff_er = calculate_microstrip_effective_dielectric(
+            args.dielectric_constant, args.prepreg_height, args.trace_width
+        )
+
+        # Calculate propagation delays
+        stripline_delay = calculate_propagation_delay(stripline_eff_er)
+        microstrip_delay = calculate_propagation_delay(microstrip_eff_er)
+
+        # Print stack-up information
+        print(f"\nPCB Stack-up Parameters:")
+        print(f"  Dielectric Constant (εr): {args.dielectric_constant:.2f}")
+        print(f"  Prepreg Height: {args.prepreg_height:.2f}")
+        print(f"  Trace Width: {args.trace_width:.2f}")
+        print(f"  Height/Width Ratio: {args.prepreg_height/args.trace_width:.3f}")
+        print(f"  Effective Dielectric (Stripline): {stripline_eff_er:.2f}")
+        print(f"  Effective Dielectric (Microstrip): {microstrip_eff_er:.2f}")
+        print(f"  Propagation Delay (Stripline): {stripline_delay * 1e12:.2f} ps/m")
+        print(f"  Propagation Delay (Microstrip): {microstrip_delay * 1e12:.2f} ps/m")
+
     # Print pin data with delay, net name, inductance, and capacitance
-    print("\nPin Data:")
+    print("\nPin Data:\n")
 
-    # Explicitly define the column widths to match the headers
-    col1_width = 10  # Pin Name
-    col2_width = 12  # Delay (ps)
-    col3_width = 30  # Net Name
-    col4_width = 16  # Inductance (H)
+    # Explicitly define the column widths - compact format for 80 columns
+    col1_width = 8  # Pin Name
+    col2_width = 7  # Delay (ps)
+    col3_width = 20  # Net Name
+    col4_width = 12  # Inductance (H)
+    col5_width = 12  # Capacitance (F)
 
-    # Print header with explicit spacing
-    print(
-        f"{'Pin Name':<{col1_width}}{'Delay (ps)':<{col2_width}}{'Net Name':<{col3_width}}{'Inductance (H)':<{col4_width}}{'Capacitance (F)'}"
-    )
-    print("-" * 90)
+    # Add columns for length calculations if parameters provided
+    if calculate_lengths:
+        col6_width = 10  # Stripline Length
+        col7_width = 10  # Microstrip Length
+
+        # Print header row 1 - column names
+        header1 = (
+            f"{'Pin':<{col1_width-2}}"
+            f"{'Delay':<{col2_width+2}}"
+            f"{'Strip':<{col6_width+1}}"
+            f"{'Micro':<{col7_width+1}}"
+            f"{'Net Name':<{col3_width}}"
+            f"{'Inductance':<{col4_width}}"
+            f"{'Capacitance':<{col5_width}}"
+        )
+        # Print header row 2 - units
+        header2 = (
+            f"{'':<{col1_width-2}}"
+            f"{'(ps)':<{col2_width+2}}"
+            f"{'(' + args.output_units + ')':<{col6_width+1}}"
+            f"{'(' + args.output_units + ')':<{col7_width+1}}"
+            f"{'':<{col3_width}}"
+            f"{'(H)':<{col4_width}}"
+            f"{'(F)':<{col5_width}}"
+        )
+        print(header1)
+        print(header2)
+        print("-" * len(header1))
+    else:
+        # Print header row 1 - column names
+        header1 = (
+            f"{'Pin':<{col1_width-2}}"
+            f"{'Delay':<{col2_width+2}}"
+            f"{'Net Name':<{col3_width}}"
+            f"{'Inductance':<{col4_width}}"
+            f"{'Capacitance':<{col5_width}}"
+        )
+        # Print header row 2 - units
+        header2 = (
+            f"{'':<{col1_width-2}}"
+            f"{'(ps)':<{col2_width+2}}"
+            f"{'':<{col3_width}}"
+            f"{'(H)':<{col4_width}}"
+            f"{'(F)':<{col5_width}}"
+        )
+        print(header1)
+        print(header2)
+        print("-" * len(header1))
 
     for pin in sorted(pin_map.keys()):
         net = pin_map.get(pin, "N/A")
@@ -212,13 +399,51 @@ def main():
             and isinstance(capacitance, float)
             and isinstance(delay, float)
         ):
-            print(
-                f"{pin:<{col1_width}}{delay:<{col2_width}.2f}{net:<{col3_width}}{inductance:<{col4_width}.3e}{capacitance:.3e}"
-            )
+            if calculate_lengths:
+                # Calculate equivalent lengths
+                stripline_length = calculate_trace_length(
+                    delay, stripline_delay, args.output_units
+                )
+                microstrip_length = calculate_trace_length(
+                    delay, microstrip_delay, args.output_units
+                )
+
+                print(
+                    f"{pin:<{col1_width-2}}"
+                    f"{delay:<{col2_width+2}.2f}"
+                    f"{stripline_length:<{col6_width+1}.1f}"
+                    f"{microstrip_length:<{col7_width+1}.1f}"
+                    f"{net:<{col3_width}}"
+                    f"{inductance:<{col4_width}.3e}"
+                    f"{capacitance:<{col5_width}.3e}"
+                )
+            else:
+                print(
+                    f"{pin:<{col1_width-2}}"
+                    f"{delay:<{col2_width+2}.2f}"
+                    f"{net:<{col3_width}}"
+                    f"{inductance:<{col4_width}.3e}"
+                    f"{capacitance:<{col5_width}.3e}"
+                )
         else:
-            print(
-                f"{pin:<{col1_width}}{'N/A':<{col2_width}}{net:<{col3_width}}{'N/A':<{col4_width}}{'N/A'}"
-            )
+            if calculate_lengths:
+                print(
+                    f"{pin:<{col1_width-2}}"
+                    f"{'N/A':<{col2_width+2}}"
+                    f"{'N/A':<{col6_width+1}}"
+                    f"{'N/A':<{col7_width+1}}"
+                    f"{net:<{col3_width}}"
+                    f"{'N/A':<{col4_width}}"
+                    f"{'N/A':<{col5_width}}"
+                )
+            else:
+                print(
+                    f"{pin:<{col1_width-2}}"
+                    f"{'N/A':<{col2_width+2}}"
+                    f"{net:<{col3_width}}"
+                    f"{'N/A':<{col4_width}}"
+                    f"{'N/A':<{col5_width}}"
+                )
 
     return 0
 
