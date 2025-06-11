@@ -295,6 +295,11 @@ def main():
     delays = calculate_delays(inductances, capacitances)
     print(f"Calculated delays for {len(delays)} pins")
 
+    # Calculate the max net name length for dynamic column sizing
+    max_net_name_length = max([len(net) for net in pin_map.values()], default=20)
+    # Ensure minimum width of 20 characters and add some padding
+    net_name_width = max(20, max_net_name_length + 2)
+
     # Initialize variables for length calculations
     calculate_lengths = False
     stripline_delay = None
@@ -335,21 +340,21 @@ def main():
     # Explicitly define the column widths - compact format for 80 columns
     col1_width = 8  # Pin Name
     col2_width = 7  # Delay (ps)
-    col3_width = 20  # Net Name
+    col3_width = net_name_width  # Net Name (dynamically sized)
     col4_width = 12  # Inductance (H)
     col5_width = 12  # Capacitance (F)
 
     # Add columns for length calculations if parameters provided
     if calculate_lengths:
-        col6_width = 10  # Stripline Length
-        col7_width = 10  # Microstrip Length
+        col6_width = 12  # Stripline Length
+        col7_width = 12  # Microstrip Length
 
         # Print header row 1 - column names
         header1 = (
             f"{'Pin':<{col1_width-2}}"
             f"{'Delay':<{col2_width+2}}"
-            f"{'Strip':<{col6_width+1}}"
-            f"{'Micro':<{col7_width+1}}"
+            f"{'Stripline':<{col6_width+1}}"
+            f"{'Microstrip':<{col7_width+1}}"
             f"{'Net Name':<{col3_width}}"
             f"{'Inductance':<{col4_width}}"
             f"{'Capacitance':<{col5_width}}"
