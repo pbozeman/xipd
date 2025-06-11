@@ -306,9 +306,36 @@ def main():
     microstrip_delay = None
 
     # Check if PCB stack-up parameters are provided for length calculations
-    if args.dielectric_constant is not None and all(
-        p is not None for p in [args.prepreg_height, args.trace_width]
-    ):
+    required_params = {"dielectric-constant", "prepreg-height", "trace-width"}
+    provided_params = set()
+
+    if args.dielectric_constant is not None:
+        provided_params.add("dielectric-constant")
+    if args.prepreg_height is not None:
+        provided_params.add("prepreg-height")
+    if args.trace_width is not None:
+        provided_params.add("trace-width")
+
+    # Check for partial parameters (some provided but not all)
+    if 0 < len(provided_params) < len(required_params):
+        # Some parameters provided but not all - show error
+        missing_params = required_params - provided_params
+        missing_args = [f"--{param}" for param in missing_params]
+        print(
+            "\nError: Incomplete stack-up and geometry information.",
+            file=sys.stderr,
+        )
+        print(
+            "Either provide ALL stack-up and geometry parameters or none at all.",
+            file=sys.stderr,
+        )
+        print(
+            f"Missing: {', '.join(missing_args)}",
+            file=sys.stderr,
+        )
+        return 1
+
+    if len(provided_params) == len(required_params):
         calculate_lengths = True
 
         # Calculate effective dielectric constants
