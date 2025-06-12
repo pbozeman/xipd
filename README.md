@@ -17,7 +17,7 @@ GTP traces.
 Export one or more parts from Vivado by performing the following in
 the TCL console:
 
-```tcl
+```text
 # customize this parts list to include one or more packages
 set partslist {
     xc7a50tfgg484-1
@@ -34,8 +34,7 @@ foreach p $partslist {
 }
 ```
 
-The only required parameter is the pkg file name. If the stackup and
-trace geometry is not provided, only on package timing delays are reported.
+Run xipd with the exported package and supply your stackup and trace geometry.
 
 Example:
 
@@ -74,11 +73,6 @@ A3        N/A       GND                                  N/A         N/A        
 A4        216       MGTPTXN0_216                       94.66       644.4       547.8
 A5        N/A       GND                                  N/A         N/A         N/A
 ...
-Y1        34        IO_L5N_T0_34                      127.70       869.3       739.0
-...
-AB20      14        IO_L15N_T2_DQS_DOUT_CSO_B_14      104.82       713.5       606.5
-
-....
 ```
 
 ## Overview
@@ -88,9 +82,8 @@ and skew turning within a differential pair when doing PCB routing. For
 signals with tight tolerances, length matching the PCB traces is insufficient.
 The on package delays of the FPGA or SOC must be included in the delay matching.
 
-Unfortunately, Xilinx does not directly publish the package delays for their
-chips. They do provide IBIS files. It is possible to calculate per pin calculation
-delays from the IBIS files. That is the main purpose of this utility.
+These delays can be exported from Vivado using the commands at the top
+of the readme.
 
 The per pin package delays can be entered directly into high end PCB design
 tools like Altium in units of time. Unfortunately, KiCad only allows the
@@ -98,10 +91,12 @@ layout designer to enter pin package delays in terms of "track length." Given
 that the propagation delay of a signal depends on a stackup dependent dielectric
 constant, and differs for microstrip vs stripline. This tool also optionally
 takes a dielectric constant as input and computes the delay in terms of length
-in addition to time. [^1]
+in addition to time. [^2]
 
+[^2]: This also means its difficult, if not impossible, to do multi layer
 delay matching in KiCad. It appears that KiCad is changing to time based
-delay matching, see: <https://gitlab.com/kicad/code/kicad/merge_requests/2212>. However, as I understand the KiCad release schedule, this won't be available
+delay matching, see: <https://gitlab.com/kicad/code/kicad/merge_requests/2212>.
+However, as I understand the KiCad release schedule, this won't be available
 in a stable release until early 2026.
 
 ## Design
@@ -109,47 +104,21 @@ in a stable release until early 2026.
 The following are my design notes, and also serve as AI context in developing
 the utility.
 
-Per pin package delays are computed from Xilinx's published IBIS files.
+### Time Based Package Delay
 
-### Delay Calculation
-
-There are 2 ways to calculate the per pin delays:
-
-Lumped LC Delay Approximation:
+The first version of the utility calculated packages delays using
+Lumped LC Delay Approximation, with per-pin L and C parsed from the Xilinx IBIS files.
 
 ```math
 t_{\text{delay}} \approx \sqrt{L \cdot C}
+
 ```
 
-Elmore Delay (RC Dominated):
+This delay computed from the IBIS files was consistently 2-4ps shorter than what is exported
+from Vivado. I assume that Vivado is doing a more advanced simulation, or potentially
+taking mutual capacitance or inductance into account.
 
-```math
-t_{\text{delay}} \approx 0.69 \cdot R \cdot C
-```
-
-<br>
-
-I am not an EE, but AI says to use Lumped LC Delay Approximation because:
-
-- Inductance and capacitance dominate at high speeds (>100 MHz),
-  especially for short interconnects like those in a package.
-- Resistance has minimal effect on propagation delay (it contributes more
-  to signal attenuation than timing).
-- The die-to-pad connection behaves like a lumped LC structure,
-  not an RC delay line.
-
-> [!Caution]
-> TODO: validate this on Reddit
-
-### Individual v.s. Mutual Inductance and Capacitance
-
-In addition to the individual pin inductance and capacitance values,
-the IBIS files include sparse matrices of mutual inductance and capacitance
-of nearby pins. I'm not sure how to make use of this as it would seem to
-require knowing signal details of the other pins. Further, AI indicated that
-the basic calculations using individual pin data v.s. mutual pin data would be
-measured in fractions of a picosecond. For purposes of delay w calculations, this
-is negligible. It is also well beyond the PCB manufacturing tolerance.
+This version computes the average of the min and max delays reported by Vivado.
 
 ### Length Calculation
 
@@ -228,9 +197,9 @@ Where:
 
 Given the same JLCPCB JLC06161H-3313 stackup used above, a 4.16 dielectric
 constant, a prepreg thickness of 3.91mil, and a trace width of
-6.16mil[^2], we have:
+6.16mil[^3], we have:
 
-[^2]: This is the trace width for a 50ohm impedance for this stackup, per
+[^3]: This is the trace width for a 50ohm impedance for this stackup, per
 the JLCPCB impedance calculator.
 
 ```math
@@ -262,14 +231,6 @@ t_d \approx 5.89 \, \text{ps/mm}
 >[!Note]
 > For this stackup, and trace geometry, stripline is roughly 15% slower than
 > microstrip.
-
-> [!Caution]
-> TODO: the microstrip calculation assumes air above the trace. Double
-> check if using a dielectric constant for soldermask makes a substantial
-> difference in the results. JLCPCB provides some values on
-> <https://jlcpcb.com/impedance>, but it is not immediately clear how these
-> should be used and/or if they are so thin that both air and solder mask
-> should be considered together.
 
 #### Propagation Delay to Length
 
