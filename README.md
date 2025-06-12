@@ -65,18 +65,18 @@ PCB Stack-up Parameters:
 
 Pin Data:
 
-Pin       Bank      Site Type                          Delay   Stripline  Microstrip
+Pin       Bank      Site Type                          Delay   Microstrip  Stripline
                                                         (ps)      (mils)      (mils)
 ------------------------------------------------------------------------------------
-A1        35        IO_L1N_T0_AD4N_35                 128.17       741.7       872.5
+A1        35        IO_L1N_T0_AD4N_35                 128.17       872.5       741.7
 A2        N/A       GND                                  N/A         N/A         N/A
 A3        N/A       GND                                  N/A         N/A         N/A
-A4        216       MGTPTXN0_216                       94.66       547.8       644.4
+A4        216       MGTPTXN0_216                       94.66       644.4       547.8
 A5        N/A       GND                                  N/A         N/A         N/A
 ...
-Y1        34        IO_L5N_T0_34                      127.70       739.0       869.3
+Y1        34        IO_L5N_T0_34                      127.70       869.3       739.0
 ...
-AB20      14        IO_L15N_T2_DQS_DOUT_CSO_B_14      104.82       606.5       713.5
+AB20      14        IO_L15N_T2_DQS_DOUT_CSO_B_14      104.82       713.5       606.5
 
 ....
 ```

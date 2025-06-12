@@ -367,8 +367,8 @@ def main():
             f"{'Bank':<{col2_width}}"
             f"{site_header:<{max_site_type_length}}  "
             f"{'Delay':>{col4_width}}"
-            f"{'Stripline':>{col7_width}}"
-            f"{'Microstrip':>{col8_width}}"
+            f"{'Microstrip':>{col7_width}}"
+            f"{'Stripline':>{col8_width}}"
         )
         # Print header row 2 - units
         header2 = (
@@ -440,8 +440,8 @@ def main():
                     f"{bank:<{col2_width}}"
                     f"{site_type:<{max_site_type_length}}  "
                     f"{avg_delay:>{col4_width}.2f}"
-                    f"{stripline_length:>{col7_width}.1f}"
-                    f"{microstrip_length:>{col8_width}.1f}"
+                    f"{microstrip_length:>{col7_width}.1f}"
+                    f"{stripline_length:>{col8_width}.1f}"
                 )
             else:
                 print(
@@ -473,3 +473,4 @@ def main():
 
 if __name__ == "__main__":
     sys.exit(main())
+
