@@ -17,6 +17,7 @@ import sys
 import signal
 from pathlib import Path
 import re
+import csv
 
 # Handle broken pipe gracefully (when output is piped to head, less, etc.)
 signal.signal(signal.SIGPIPE, signal.SIG_DFL)
@@ -24,13 +25,13 @@ signal.signal(signal.SIGPIPE, signal.SIG_DFL)
 
 def parse_args():
     parser = argparse.ArgumentParser(
-        description="Compute package delays for Xilinx chips from IBIS files."
+        description="Compute package delays for Xilinx chips from Vivado CSV files."
     )
 
     parser.add_argument(
         "package_file",
         type=Path,
-        help="Path to the package file (e.g., 'ibis_files/artix7/xa7a12t_csg325.pkg')",
+        help="Path to the Vivado package file (e.g., 'pkgs/xc7a50tfgg484-1.pkg')",
     )
 
     # PCB stack-up parameters for length calculation
@@ -64,116 +65,6 @@ def parse_args():
     )
 
     return parser.parse_args()
-
-
-def parse_pin_numbers(file_path):
-    """Parse the pin numbers section to extract pin to net mapping."""
-    pin_map = {}
-    in_pin_numbers = False
-
-    with open(file_path, "r") as f:
-        for line in f:
-            line = line.strip()
-
-            # Check if we're entering or leaving the Pin Numbers section
-            if line == "[Pin Numbers]":
-                in_pin_numbers = True
-                continue
-            elif in_pin_numbers and line.startswith("[") and line != "[Pin Name]":
-                in_pin_numbers = False
-                continue
-
-            # Skip comments, empty lines, and header
-            if (
-                not in_pin_numbers
-                or not line
-                or line.startswith("|")
-                or line.startswith("[Pin Name]")
-            ):
-                continue
-
-            # Parse pin and net information
-            parts = line.split()
-            if len(parts) >= 3:  # Need at least pin name, net number, and net name
-                pin_name = parts[0]
-
-                # Find the net number position (preceded by '|')
-                net_number_pos = -1
-                for i, part in enumerate(parts):
-                    if part == "|":
-                        net_number_pos = i
-                        break
-
-                if net_number_pos >= 0 and net_number_pos + 2 < len(parts):
-                    # The net name is typically after the net number
-                    net_name = parts[net_number_pos + 2]
-                    pin_map[pin_name] = net_name
-
-    return pin_map
-
-
-def parse_matrix_data(file_path, matrix_type):
-    """Parse inductance or capacitance matrix data."""
-    values = {}
-    in_matrix = False
-    current_row = None
-
-    with open(file_path, "r") as f:
-        for line in f:
-            line = line.strip()
-
-            # Check if we're entering the matrix section
-            if line.startswith(f"[{matrix_type} Matrix]"):
-                in_matrix = True
-                continue
-            elif in_matrix and line.startswith("[") and not line.startswith("[Row]"):
-                in_matrix = False
-                continue
-
-            # Skip comments and empty lines
-            if not in_matrix or not line or line.startswith("|"):
-                continue
-
-            # Skip "Sparse_matrix" line
-            if "Sparse_matrix" in line:
-                continue
-
-            # Check for row header
-            if line.startswith("[Row]"):
-                parts = line.split()
-                if len(parts) > 1:
-                    current_row = parts[1]
-                continue
-
-            # Parse values
-            if current_row:
-                parts = line.split()
-                if len(parts) >= 2:
-                    col_name = parts[0]
-                    try:
-                        value = float(parts[1])
-
-                        # For diagonal elements (self-inductance/capacitance)
-                        if col_name == current_row:
-                            values[col_name] = value
-                    except ValueError:
-                        pass
-
-    return values
-
-
-def calculate_delays(inductances, capacitances):
-    """Calculate delays using the LC delay approximation: t_delay ≈ √(L × C)."""
-    delays = {}
-
-    for pin in set(inductances.keys()) & set(capacitances.keys()):
-        L = inductances[pin]
-        C = capacitances[pin]
-        # Calculate delay in seconds, convert to picoseconds
-        delay_ps = 1e12 * (L * C) ** 0.5
-        delays[pin] = delay_ps
-
-    return delays
 
 
 def convert_length_units(value, from_unit, to_unit):
@@ -270,6 +161,89 @@ def calculate_trace_length(delay_ps, propagation_delay_s_m, output_unit="mm"):
         return length_mm
 
 
+def parse_vivado_pkg_file(file_path):
+    """Parse a Vivado package file (.pkg) to extract pin delay information.
+
+    Args:
+        file_path: Path to the Vivado package file
+
+    Returns:
+        Dictionary with pin data containing:
+        - pin_data: Dict mapping pin numbers to their details (bank, site, type, avg_delay)
+        - max_net_name_length: Length of the longest pin name for formatting
+    """
+    pin_data = {}
+
+    with open(file_path, "r") as f:
+        # Use csv module to handle the CSV format
+        reader = csv.reader(f, delimiter=",")
+
+        # Skip header rows (comments and column headers)
+        header_row = None
+        for row in reader:
+            if row and row[0].startswith("#"):
+                continue
+            elif row and "Pin Number" in row:
+                header_row = row
+                break
+
+        if not header_row:
+            print(f"Error: Could not find header row in {file_path}", file=sys.stderr)
+            return {"pin_data": {}, "max_net_name_length": 0}
+
+        # Find column indices for the data we need
+        pin_idx = header_row.index("Pin Number")
+        bank_idx = header_row.index("IO Bank")
+        site_idx = header_row.index("Site")
+        site_type_idx = header_row.index("Site Type")
+        min_delay_idx = header_row.index("Min Trace Delay (ps)")
+        max_delay_idx = header_row.index("Max Trace Delay (ps)")
+
+        # Process data rows
+        for row in reader:
+            if not row or len(row) <= max(
+                pin_idx, bank_idx, site_idx, site_type_idx, min_delay_idx, max_delay_idx
+            ):
+                continue
+
+            pin = row[pin_idx].strip()
+            bank = row[bank_idx].strip() if row[bank_idx].strip() else "N/A"
+            site = row[site_idx].strip() if row[site_idx].strip() else "N/A"
+            site_type = (
+                row[site_type_idx].strip() if row[site_type_idx].strip() else "N/A"
+            )
+
+            # Process min/max delays (may be empty for some pins)
+            min_delay = row[min_delay_idx].strip()
+            max_delay = row[max_delay_idx].strip()
+
+            # Calculate average delay if both min and max are available
+            avg_delay = None
+            if min_delay and max_delay:
+                try:
+                    min_val = float(min_delay)
+                    max_val = float(max_delay)
+                    avg_delay = (min_val + max_val) / 2.0
+                except ValueError:
+                    # If conversion fails, leave as None
+                    pass
+
+            # Store pin data
+            pin_data[pin] = {
+                "bank": bank,
+                "site": site,
+                "site_type": site_type,
+                "min_delay": float(min_delay) if min_delay else None,
+                "max_delay": float(max_delay) if max_delay else None,
+                "avg_delay": avg_delay,
+            }
+
+    # Calculate max pin name length for formatting
+    max_pin_length = max([len(pin) for pin in pin_data.keys()], default=10)
+
+    return {"pin_data": pin_data, "max_pin_length": max_pin_length}
+
+
 def main():
     args = parse_args()
 
@@ -280,25 +254,16 @@ def main():
 
     print(f"Processing package file: {args.package_file}")
 
-    # Parse pin mapping
-    pin_map = parse_pin_numbers(args.package_file)
-    print(f"Found {len(pin_map)} pins in the pin map")
+    # Parse Vivado package file
+    result = parse_vivado_pkg_file(args.package_file)
+    pin_data = result["pin_data"]
 
-    # Parse inductance and capacitance matrices
-    inductances = parse_matrix_data(args.package_file, "Inductance")
-    capacitances = parse_matrix_data(args.package_file, "Capacitance")
+    print(f"Found {len(pin_data)} pins in the package file")
 
-    print(f"Found {len(inductances)} self-inductance values")
-    print(f"Found {len(capacitances)} self-capacitance values")
-
-    # Calculate delays
-    delays = calculate_delays(inductances, capacitances)
-    print(f"Calculated delays for {len(delays)} pins")
-
-    # Calculate the max net name length for dynamic column sizing
-    max_net_name_length = max([len(net) for net in pin_map.values()], default=20)
-    # Ensure minimum width of 20 characters and add some padding
-    net_name_width = max(20, max_net_name_length + 2)
+    # Calculate the max pin name length for dynamic column sizing
+    max_pin_length = result["max_pin_length"]
+    # Ensure minimum width of 10 characters and add some padding
+    pin_width = max(10, max_pin_length + 2)
 
     # Initialize variables for length calculations
     calculate_lengths = False
@@ -367,40 +332,37 @@ def main():
         print(f"  Propagation Delay (Stripline): {stripline_delay_mm:.2f} ps/mm")
         print(f"  Propagation Delay (Microstrip): {microstrip_delay_mm:.2f} ps/mm")
 
-    # Print pin data with delay, net name, inductance, and capacitance
+    # Print pin data with delay and other information
     print("\nPin Data:\n")
 
-    # Explicitly define the column widths - compact format for 80 columns
-    col1_width = 8  # Pin Name
-    col2_width = 7  # Delay (ps)
-    col3_width = net_name_width  # Net Name (dynamically sized)
-    col4_width = 12  # Inductance (H)
-    col5_width = 12  # Capacitance (F)
+    # Explicitly define the column widths - adjusted for better alignment
+    col1_width = 10  # Pin Number
+    col2_width = 10  # Bank
+    col3_width = 25  # Site Type - increased width for longer site types
+    col4_width = 10  # Delay (ps)
 
     # Add columns for length calculations if parameters provided
     if calculate_lengths:
-        col6_width = 12  # Stripline Length
-        col7_width = 12  # Microstrip Length
+        col7_width = 12  # Stripline Length
+        col8_width = 12  # Microstrip Length
 
         # Print header row 1 - column names
         header1 = (
-            f"{'Pin':<{col1_width-2}}"
-            f"{'Delay':<{col2_width+2}}"
-            f"{'Stripline':<{col6_width+1}}"
-            f"{'Microstrip':<{col7_width+1}}"
-            f"{'Net Name':<{col3_width}}"
-            f"{'Inductance':<{col4_width}}"
-            f"{'Capacitance':<{col5_width}}"
+            f"{'Pin':<{col1_width}}"
+            f"{'Bank':<{col2_width}}"
+            f"{'Site Type':<{col3_width}}"
+            f"{'Delay':>{col4_width}}"
+            f"{'Stripline':>{col7_width}}"
+            f"{'Microstrip':>{col8_width}}"
         )
         # Print header row 2 - units
         header2 = (
-            f"{'':<{col1_width-2}}"
-            f"{'(ps)':<{col2_width+2}}"
-            f"{'(' + args.output_units + ')':<{col6_width+1}}"
-            f"{'(' + args.output_units + ')':<{col7_width+1}}"
+            f"{'':<{col1_width}}"
+            f"{'':<{col2_width}}"
             f"{'':<{col3_width}}"
-            f"{'(H)':<{col4_width}}"
-            f"{'(F)':<{col5_width}}"
+            f"{'(ps)':>{col4_width}}"
+            f"{'(' + args.output_units + ')':>{col7_width}}"
+            f"{'(' + args.output_units + ')':>{col8_width}}"
         )
         print(header1)
         print(header2)
@@ -408,79 +370,71 @@ def main():
     else:
         # Print header row 1 - column names
         header1 = (
-            f"{'Pin':<{col1_width-2}}"
-            f"{'Delay':<{col2_width+2}}"
-            f"{'Net Name':<{col3_width}}"
-            f"{'Inductance':<{col4_width}}"
-            f"{'Capacitance':<{col5_width}}"
+            f"{'Pin':<{col1_width}}"
+            f"{'Bank':<{col2_width}}"
+            f"{'Site Type':<{col3_width}}"
+            f"{'Delay':>{col4_width}}"
         )
         # Print header row 2 - units
         header2 = (
-            f"{'':<{col1_width-2}}"
-            f"{'(ps)':<{col2_width+2}}"
+            f"{'':<{col1_width}}"
+            f"{'':<{col2_width}}"
             f"{'':<{col3_width}}"
-            f"{'(H)':<{col4_width}}"
-            f"{'(F)':<{col5_width}}"
+            f"{'(ps)':>{col4_width}}"
         )
         print(header1)
         print(header2)
         print("-" * len(header1))
 
-    for pin in sorted(pin_map.keys()):
-        net = pin_map.get(pin, "N/A")
-        inductance = inductances.get(pin, "N/A")
-        capacitance = capacitances.get(pin, "N/A")
-        delay = delays.get(pin, "N/A")
+    for pin in sorted(pin_data.keys()):
+        pin_info = pin_data[pin]
+        bank = pin_info.get("bank", "N/A")
+        site_type = pin_info.get("site_type", "N/A")
+        avg_delay = pin_info.get("avg_delay")
+        min_delay = pin_info.get("min_delay")
+        max_delay = pin_info.get("max_delay")
 
-        if (
-            isinstance(inductance, float)
-            and isinstance(capacitance, float)
-            and isinstance(delay, float)
-        ):
+        if avg_delay is not None:
             if calculate_lengths:
                 # Calculate equivalent lengths
                 stripline_length = calculate_trace_length(
-                    delay, stripline_delay, args.output_units
+                    avg_delay, stripline_delay, args.output_units
                 )
                 microstrip_length = calculate_trace_length(
-                    delay, microstrip_delay, args.output_units
+                    avg_delay, microstrip_delay, args.output_units
                 )
 
                 print(
-                    f"{pin:<{col1_width-2}}"
-                    f"{delay:<{col2_width+2}.2f}"
-                    f"{stripline_length:<{col6_width+1}.1f}"
-                    f"{microstrip_length:<{col7_width+1}.1f}"
-                    f"{net:<{col3_width}}"
-                    f"{inductance:<{col4_width}.3e}"
-                    f"{capacitance:<{col5_width}.3e}"
+                    f"{pin:<{col1_width}}"
+                    f"{bank:<{col2_width}}"
+                    f"{site_type:<{col3_width}}"
+                    f"{avg_delay:>{col4_width}.2f}"
+                    f"{stripline_length:>{col7_width}.1f}"
+                    f"{microstrip_length:>{col8_width}.1f}"
                 )
             else:
                 print(
-                    f"{pin:<{col1_width-2}}"
-                    f"{delay:<{col2_width+2}.2f}"
-                    f"{net:<{col3_width}}"
-                    f"{inductance:<{col4_width}.3e}"
-                    f"{capacitance:<{col5_width}.3e}"
+                    f"{pin:<{col1_width}}"
+                    f"{bank:<{col2_width}}"
+                    f"{site_type:<{col3_width}}"
+                    f"{avg_delay:>{col4_width}.2f}"
                 )
         else:
             if calculate_lengths:
                 print(
-                    f"{pin:<{col1_width-2}}"
-                    f"{'N/A':<{col2_width+2}}"
-                    f"{'N/A':<{col6_width+1}}"
-                    f"{'N/A':<{col7_width+1}}"
-                    f"{net:<{col3_width}}"
-                    f"{'N/A':<{col4_width}}"
-                    f"{'N/A':<{col5_width}}"
+                    f"{pin:<{col1_width}}"
+                    f"{bank:<{col2_width}}"
+                    f"{site_type:<{col3_width}}"
+                    f"{'N/A':>{col4_width}}"
+                    f"{'N/A':>{col7_width}}"
+                    f"{'N/A':>{col8_width}}"
                 )
             else:
                 print(
-                    f"{pin:<{col1_width-2}}"
-                    f"{'N/A':<{col2_width+2}}"
-                    f"{net:<{col3_width}}"
-                    f"{'N/A':<{col4_width}}"
-                    f"{'N/A':<{col5_width}}"
+                    f"{pin:<{col1_width}}"
+                    f"{bank:<{col2_width}}"
+                    f"{site_type:<{col3_width}}"
+                    f"{'N/A':>{col4_width}}"
                 )
 
     return 0

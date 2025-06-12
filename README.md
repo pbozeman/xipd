@@ -1,7 +1,12 @@
-# Xilinx IBIS Package Delay
+# Xilinx Package Delay
 
-Compute package delays for Xilinx chips from IBIS files, including converting
-them to lengths that can be used in KiCad track tuning.
+Compute package delays for Xilinx chips from exported Vivado pkg files,
+including converting delays to lengths that can be used in KiCad track tuning.[^1]
+
+[^1]: The first version of this utility parsed the Xilinx Ibis files. The utility name was therefor **X**ilinx **I**BIS **P**ackage **D**elay. It now computes
+trace delays off of Vivado exports. Vivado model the delays slightly
+differently, and presumably, more accurately.
+This is now the **XI**linx **P**ackage **D**elay utility.
 
 For the microstrip use case, run the tool multiple times if different trace
 widths are needed, e.g. 50ohm for DDR3 and 100ohm differential pairs for
@@ -9,10 +14,25 @@ GTP traces.
 
 ## Usage
 
-Download IBIS files for your package. The can be found in the left side
-navigation under IBIS Models at <https://www.xilinx.com/support/download/index.html/content/xilinx/en/downloadNav/device-models.html>.
+Export one or more parts from Vivado by performing the following in
+the TCL console:
 
-Unzip the models and run against the pkg file for the desired package.
+```tcl
+# customize this parts list to include one or more packages
+set partslist {
+    xc7a50tfgg484-1
+    xc7z020clg484-1
+}
+
+foreach p $partslist {
+    puts $p
+    create_project -in_memory -part $p
+    set_property design_mode PinPlanning [current_fileset]
+    open_io_design -name io_1
+    write_csv -force $p.pkg
+    close_project
+}
+```
 
 The only required parameter is the pkg file name. If the stackup and
 trace geometry is not provided, only on package timing delays are reported.
@@ -20,41 +40,41 @@ trace geometry is not provided, only on package timing delays are reported.
 Example:
 
 ```bash
-python3 xipd ibis_files/artix7/xc7a50t_fgg484.pkg \
-             --dielectric-constant 4.16           \
-             --prepreg-height 3.91                \
-             --trace-width 6.16                   \
-             --output-units mils
+./xipd pkgs/xc7a50tfgg484-1.pkg \
+     --dielectric-constant 4.16 \
+     --prepreg-height 3.91      \
+     --trace-width 3.68         \
+     --output-units mils
 ```
 
 Results:
 
 ```text
-Processing package file: ibis_files/artix7/xc7a50t_fgg484.pkg
-Found 303 pins in the pin map
-Found 303 self-inductance values
-Found 303 self-capacitance values
-Calculated delays for 303 pins
+Processing package file: pkgs/xc7a50tfgg484-1.pkg
+Found 484 pins in the package file
 
 PCB Stack-up Parameters:
   Dielectric Constant (εr): 4.16
   Prepreg Height: 3.91
-  Trace Width: 6.16
-  Height/Width Ratio: 0.635
+  Trace Width: 3.68
+  Height/Width Ratio: 1.062
   Effective Dielectric (Stripline): 4.16
-  Effective Dielectric (Microstrip): 3.12
-  Propagation Delay (Stripline): 6803.40 ps/m
-  Propagation Delay (Microstrip): 5890.26 ps/m
+  Effective Dielectric (Microstrip): 3.01
+  Propagation Delay (Stripline): 6.80 ps/mm
+  Propagation Delay (Microstrip): 5.78 ps/mm
 
 Pin Data:
 
-Pin   Delay    Stripline    Microstrip   Net Name                      Inductance  Capacitance
-      (ps)     (mils)       (mils)                                     (H)         (F)
------------------------------------------------------------------------------------------------
-A1    121.35   702.2        811.1        IO_L1N_T0_AD4N_35             1.069e-08   1.378e-12
-A10   69.29    401.0        463.1        MGTPRXN2_216                  6.657e-09   7.212e-13
-A13   128.75   745.0        860.5        IO_L10P_T1_16                 1.092e-08   1.518e-12
-A14   114.22   661.0        763.5        IO_L10N_T1_16                 9.622e-09   1.356e-12
+Pin       Bank      Site Type                     Delay   Stripline  Microstrip
+                                                   (ps)      (mils)      (mils)
+-------------------------------------------------------------------------------
+A1        35        IO_L1N_T0_AD4N_35            128.17       741.7       872.5
+A10       216       MGTPRXN2_216                  70.22       406.3       478.0
+A11       N/A       GND                             N/A         N/A         N/A
+A13       16        IO_L10P_T1_16                118.53       685.9       806.9
+A14       16        IO_L10N_T1_16                120.25       695.9       818.6
+A15       16        IO_L9P_T1_DQS_16              97.29       563.0       662.3
+A16       16        IO_L9N_T1_DQS_16             101.42       586.9       690.4
 
 ....
 ```
@@ -78,7 +98,6 @@ constant, and differs for microstrip vs stripline. This tool also optionally
 takes a dielectric constant as input and computes the delay in terms of length
 in addition to time. [^1]
 
-[^1]: This also means its difficult, if not impossible, to do multi layer
 delay matching in KiCad. It appears that KiCad is changing to time based
 delay matching, see: <https://gitlab.com/kicad/code/kicad/merge_requests/2212>. However, as I understand the KiCad release schedule, this won't be available
 in a stable release until early 2026.
