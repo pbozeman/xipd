@@ -341,8 +341,8 @@ def main():
         print(f"  Height/Width Ratio: {args.prepreg_height/args.trace_width:.3f}")
         print(f"  Effective Dielectric (Stripline): {stripline_eff_er:.2f}")
         print(f"  Effective Dielectric (Microstrip): {microstrip_eff_er:.2f}")
-        print(f"  Propagation Delay (Stripline): {stripline_delay_mm:.2f} ps/mm")
-        print(f"  Propagation Delay (Microstrip): {microstrip_delay_mm:.2f} ps/mm")
+        print(f"  Propagation Delay (Stripline): {stripline_delay_mm:.4f} ps/mm")
+        print(f"  Propagation Delay (Microstrip): {microstrip_delay_mm:.4f} ps/mm")
 
     # Print pin data with delay and other information
     print("\n")
@@ -435,14 +435,25 @@ def main():
                     avg_delay, microstrip_delay, args.output_units
                 )
 
-                print(
-                    f"{pin:<{col1_width}}"
-                    f"{bank:<{col2_width}}"
-                    f"{site_type:<{max_site_type_length}}  "
-                    f"{avg_delay:>{col4_width}.2f}"
-                    f"{microstrip_length:>{col7_width}.1f}"
-                    f"{stripline_length:>{col8_width}.1f}"
-                )
+                # Format lengths based on output units - 4 decimal places for mm, 1 for mils
+                if args.output_units == "mm":
+                    print(
+                        f"{pin:<{col1_width}}"
+                        f"{bank:<{col2_width}}"
+                        f"{site_type:<{max_site_type_length}}  "
+                        f"{avg_delay:>{col4_width}.2f}"
+                        f"{microstrip_length:>{col7_width}.4f}"
+                        f"{stripline_length:>{col8_width}.4f}"
+                    )
+                else:
+                    print(
+                        f"{pin:<{col1_width}}"
+                        f"{bank:<{col2_width}}"
+                        f"{site_type:<{max_site_type_length}}  "
+                        f"{avg_delay:>{col4_width}.2f}"
+                        f"{microstrip_length:>{col7_width}.1f}"
+                        f"{stripline_length:>{col8_width}.1f}"
+                    )
             else:
                 print(
                     f"{pin:<{col1_width}}"
@@ -473,4 +484,3 @@ def main():
 
 if __name__ == "__main__":
     sys.exit(main())
-
