@@ -265,6 +265,18 @@ def main():
     # Ensure minimum width of 10 characters and add some padding
     pin_width = max(10, max_pin_length + 2)
 
+    # Calculate width for site type column with minimum width
+    max_site_type_length = 0
+    for pin_info in pin_data.values():
+        site_type = pin_info.get("site_type", "N/A")
+        max_site_type_length = max(max_site_type_length, len(site_type))
+
+    # Use a minimum width of 20 for site types, expanding as needed
+    # We'll use max_site_type_length directly in the print statements with explicit padding
+    # Min width check only needed for min_site_type_length
+    if max_site_type_length < 20:
+        max_site_type_length = 20
+
     # Initialize variables for length calculations
     calculate_lengths = False
     stripline_delay = None
@@ -333,12 +345,14 @@ def main():
         print(f"  Propagation Delay (Microstrip): {microstrip_delay_mm:.2f} ps/mm")
 
     # Print pin data with delay and other information
-    print("\nPin Data:\n")
+    print("\n")
 
-    # Explicitly define the column widths - adjusted for better alignment
+    # Define the column widths
     col1_width = 10  # Pin Number
     col2_width = 10  # Bank
-    col3_width = 25  # Site Type - increased width for longer site types
+    col3_width = (
+        max_site_type_length  # Site Type - dynamically sized based on longest entry
+    )
     col4_width = 10  # Delay (ps)
 
     # Add columns for length calculations if parameters provided
@@ -347,10 +361,11 @@ def main():
         col8_width = 12  # Microstrip Length
 
         # Print header row 1 - column names
+        site_header = "Site Type"
         header1 = (
             f"{'Pin':<{col1_width}}"
             f"{'Bank':<{col2_width}}"
-            f"{'Site Type':<{col3_width}}"
+            f"{site_header:<{max_site_type_length}}  "
             f"{'Delay':>{col4_width}}"
             f"{'Stripline':>{col7_width}}"
             f"{'Microstrip':>{col8_width}}"
@@ -359,7 +374,7 @@ def main():
         header2 = (
             f"{'':<{col1_width}}"
             f"{'':<{col2_width}}"
-            f"{'':<{col3_width}}"
+            f"{'':<{max_site_type_length}}  "
             f"{'(ps)':>{col4_width}}"
             f"{'(' + args.output_units + ')':>{col7_width}}"
             f"{'(' + args.output_units + ')':>{col8_width}}"
@@ -369,24 +384,40 @@ def main():
         print("-" * len(header1))
     else:
         # Print header row 1 - column names
+        site_header = "Site Type"
         header1 = (
             f"{'Pin':<{col1_width}}"
             f"{'Bank':<{col2_width}}"
-            f"{'Site Type':<{col3_width}}"
+            f"{site_header:<{max_site_type_length}}  "
             f"{'Delay':>{col4_width}}"
         )
         # Print header row 2 - units
         header2 = (
             f"{'':<{col1_width}}"
             f"{'':<{col2_width}}"
-            f"{'':<{col3_width}}"
+            f"{'':<{max_site_type_length}}  "
             f"{'(ps)':>{col4_width}}"
         )
         print(header1)
         print(header2)
         print("-" * len(header1))
 
-    for pin in sorted(pin_data.keys()):
+    def natural_sort_key(pin):
+        """Return a key for sorting pins like A1...An, B1...Bn, AA1...AAn, etc."""
+        # Split the pin name into letter part and number part
+        import re
+
+        letter_part = "".join(c for c in pin if c.isalpha())
+        number_match = re.search(r"\d+", pin)
+        number_part = int(number_match.group()) if number_match else 0
+
+        # Add a priority based on letter part length so single letters come before double letters
+        letter_length_priority = len(letter_part)
+
+        # For primary sort, use letter length (1 or 2) and then letter part itself
+        return (letter_length_priority, letter_part, number_part)
+
+    for pin in sorted(pin_data.keys(), key=natural_sort_key):
         pin_info = pin_data[pin]
         bank = pin_info.get("bank", "N/A")
         site_type = pin_info.get("site_type", "N/A")
@@ -407,7 +438,7 @@ def main():
                 print(
                     f"{pin:<{col1_width}}"
                     f"{bank:<{col2_width}}"
-                    f"{site_type:<{col3_width}}"
+                    f"{site_type:<{max_site_type_length}}  "
                     f"{avg_delay:>{col4_width}.2f}"
                     f"{stripline_length:>{col7_width}.1f}"
                     f"{microstrip_length:>{col8_width}.1f}"
@@ -416,7 +447,7 @@ def main():
                 print(
                     f"{pin:<{col1_width}}"
                     f"{bank:<{col2_width}}"
-                    f"{site_type:<{col3_width}}"
+                    f"{site_type:<{max_site_type_length}}  "
                     f"{avg_delay:>{col4_width}.2f}"
                 )
         else:
@@ -424,7 +455,7 @@ def main():
                 print(
                     f"{pin:<{col1_width}}"
                     f"{bank:<{col2_width}}"
-                    f"{site_type:<{col3_width}}"
+                    f"{site_type:<{max_site_type_length}}  "
                     f"{'N/A':>{col4_width}}"
                     f"{'N/A':>{col7_width}}"
                     f"{'N/A':>{col8_width}}"
@@ -433,7 +464,7 @@ def main():
                 print(
                     f"{pin:<{col1_width}}"
                     f"{bank:<{col2_width}}"
-                    f"{site_type:<{col3_width}}"
+                    f"{site_type:<{max_site_type_length}}  "
                     f"{'N/A':>{col4_width}}"
                 )
 
