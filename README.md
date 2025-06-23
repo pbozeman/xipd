@@ -107,16 +107,18 @@ the utility.
 ### Time Based Package Delay
 
 The first version of the utility calculated packages delays using
-Lumped LC Delay Approximation, with per-pin L and C parsed from the Xilinx IBIS files.
+Lumped LC Delay Approximation, with per-pin L and C parsed from the
+Xilinx IBIS files. The following formula was used:
 
 ```math
 t_{\text{delay}} \approx \sqrt{L \cdot C}
 
 ```
 
-This delay computed from the IBIS files was consistently 2-4ps shorter than what is exported
-from Vivado. I assume that Vivado is doing a more advanced simulation, or potentially
-taking mutual capacitance or inductance into account.
+Delays computed in this manor were consistently 2-4ps shorter than what
+is exported from Vivado. I assume that Vivado is doing a more
+advanced simulation, or potentially taking mutual capacitance or inductance
+into account.
 
 This version computes the average of the min and max delays reported by Vivado.
 
@@ -141,41 +143,6 @@ Where:
 - ε_eff: effective dielectric constant
 - c: speed of light ≈ 3 × 10⁸ m/s
 
-#### Stripline
-
-In a stripline (a trace fully embedded in dielectric), the electromagnetic
-fields are entirely contained within the dielectric. So:
-
-```math
-\varepsilon_{\text{eff}} = \varepsilon_r
-```
-
-<br>
-
-For example, JLC06161H-3313, a common 6 layer controlled impedance stackup
-at JLCPCB has a dielectric constant of 4.16.
-
-therefore:
-
-```math
-\varepsilon_{\text{eff}} = \varepsilon_r = 4.16
-```
-
-```math
-t_d = \frac{\sqrt{\varepsilon_{\text{eff}}}}{c}
-```
-
-```math
-t_d = \frac{\sqrt{4.16}}{3 \times 10^8}
-     \approx 6.799 \times 10^{-9} \text{ s/m}
-```
-
-<br>
-
-```math
-t_d \approx 6.8 \, \text{ps/mm}
-```
-
 #### Microstrip
 
 The effective dielectric constant `ε_eff` for a microstrip (air above,
@@ -194,6 +161,47 @@ Where:
 - `h` = Height of the dielectric (distance from trace to reference plane)
 - `w` = Width of the microstrip trace
 - (All dimensions must use the same unit, e.g., mm or mils)
+
+#### Stripline
+
+In a stripline (a trace fully embedded in dielectric), the electromagnetic
+fields are entirely contained within the dielectric. So:
+
+```math
+\varepsilon_{\text{eff}} = \varepsilon_r
+```
+
+### Example Delays for JLCPCB 6 Layer stackup
+
+The following examples use the default 6 layer impedance controlled stackup
+from JLCPCB (JLC06161H-3313):
+
+| Layer   | Material                    | Thickness (mil) | Thickness (mm) |
+| ------- | --------------------------- | --------------- | -------------- |
+| L1      | Outer Copper Weight 1 oz    | 1.38            | 0.0350         |
+| Prepreg | 3313 RC57%                  | 3.91            | 0.0994         |
+| L2      | Inner Copper Weight         | 0.60            | 0.0152         |
+| Core    | 0.55 mm H (no copper)       | 21.65           | 0.5500         |
+| L3      | Inner Copper Weight         | 0.60            | 0.0152         |
+| Prepreg | 2116 RC54%                  | 4.28            | 0.1088         |
+| L4      | Inner Copper Weight         | 0.60            | 0.0152         |
+| Core    | 0.55 mm H (no copper)       | 21.65           | 0.5500         |
+| L5      | Inner Copper Weight         | 0.60            | 0.0152         |
+| Prepreg | 3313 RC57%                  | 3.91            | 0.0994         |
+| L6      | Outer Copper Weight 1 oz    | 1.38            | 0.0350         |
+
+Dielectric constants for JLCPCB prepreg and cores:
+
+| Prepreg Type | Dielectric Constant |
+| ------------ | ------------------- |
+| 7628         | 4.4                 |
+| 3313         | 4.1                 |
+| 1080         | 3.91                |
+| 2116         | 4.16                |
+
+#### Microstrip Example
+
+FIXME: wrong values!!!!
 
 Given the same JLCPCB JLC06161H-3313 stackup used above, a 4.16 dielectric
 constant, a prepreg thickness of 3.91mil, and a trace width of
@@ -226,6 +234,34 @@ t_d \approx 5.89 \, \text{ps/mm}
 
 ```
 
+```math
+t_d \approx 6.8 \, \text{ps/mm}
+```
+
+<br>
+
+#### Stripline Example
+
+FIXME: wrong values!!!!
+
+For example, JLC06161H-3313, a common 6 layer controlled impedance stackup
+at JLCPCB has a dielectric constant of 4.16.
+
+therefore:
+
+```math
+\varepsilon_{\text{eff}} = \varepsilon_r = 4.16
+```
+
+```math
+t_d = \frac{\sqrt{\varepsilon_{\text{eff}}}}{c}
+```
+
+```math
+t_d = \frac{\sqrt{4.16}}{3 \times 10^8}
+     \approx 6.799 \times 10^{-9} \text{ s/m}
+```
+
 <br>
 
 >[!Note]
@@ -249,28 +285,3 @@ Where:
 - t_d: propagation delay computed from stackup and trace geometry
 
 #### Example 6-layer Stack-up
-
-The examples above use the following 6-layer stackup from JLCPCB:
-
-| Layer   | Material                    | Thickness (mil) | Thickness (mm) |
-| ------- | --------------------------- | --------------- | -------------- |
-| L1      | Outer Copper Weight 1 oz    | 1.38            | 0.0350         |
-| Prepreg | 3313 RC57%                  | 3.91            | 0.0994         |
-| L2      | Inner Copper Weight         | 0.60            | 0.0152         |
-| Core    | 0.55 mm H (no copper)       | 21.65           | 0.5500         |
-| L3      | Inner Copper Weight         | 0.60            | 0.0152         |
-| Prepreg | 2116 RC54%                  | 4.28            | 0.1088         |
-| L4      | Inner Copper Weight         | 0.60            | 0.0152         |
-| Core    | 0.55 mm H (no copper)       | 21.65           | 0.5500         |
-| L5      | Inner Copper Weight         | 0.60            | 0.0152         |
-| Prepreg | 3313 RC57%                  | 3.91            | 0.0994         |
-| L6      | Outer Copper Weight 1 oz    | 1.38            | 0.0350         |
-
-Refer to JLCPCB’s impedance calculator for these values: <https://jlcpcb.com/impedance>
-
-| Prepreg Type | Dielectric Constant |
-| ------------ | ------------------- |
-| 7628         | 4.4                 |
-| 3313         | 4.1                 |
-| 1080         | 3.91                |
-| 2116         | 4.16                |
