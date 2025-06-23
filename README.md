@@ -120,7 +120,10 @@ is exported from Vivado. I assume that Vivado is doing a more
 advanced simulation, or potentially taking mutual capacitance or inductance
 into account.
 
-This version computes the average of the min and max delays reported by Vivado.
+>[!Note]
+> This version uses the average of the min and max delays reported by Vivado.
+
+---
 
 ### Length Calculation
 
@@ -143,6 +146,8 @@ Where:
 - ε_eff: effective dielectric constant
 - c: speed of light ≈ 3 × 10⁸ m/s
 
+---
+
 #### Microstrip
 
 The effective dielectric constant `ε_eff` for a microstrip (air above,
@@ -163,6 +168,8 @@ Where:
 - `h` = Height of the dielectric (distance from trace to reference plane)
 - `w` = Width of the microstrip trace
 - (All dimensions must use the same unit, e.g., mm or mils)
+
+---
 
 #### Stripline
 
@@ -195,6 +202,8 @@ Where:
 This is a weighted average of the permittivities, accounting for unequal
 dielectric regions surrounding the trace.
 
+---
+
 ### Example Delays for JLCPCB 6 Layer stackup
 
 The following examples use the default 6 layer impedance controlled stackup
@@ -223,76 +232,66 @@ Dielectric constants for JLCPCB prepreg and cores:
 | 1080         | 3.91                |
 | 2116         | 4.16                |
 
-#### Microstrip Example
+---
 
-FIXME: wrong values!!!!
+#### Microstrip Example (Routing on L1)
 
-Given the same JLCPCB JLC06161H-3313 stackup used above, a 4.16 dielectric
-constant, a prepreg thickness of 3.91mil, and a trace width of
-6.16mil[^4], we have:
+If routing on **L1**, the return plane is **L2**, separated by:
 
-[^4]: This is the trace width for a 50ohm impedance for this stackup, per
-the JLCPCB impedance calculator.
+- Dielectric: Prepreg 3313
+- Dielectric constant: `ε_r = 4.10`
+- Thickness: `h = 3.91 mil`
+- Trace width: `w = 6.16 mil` (for 50 Ω characteristic impedance)
 
 ```math
 \varepsilon_{\text{eff}} =
-  \frac{4.16 + 1}{2} +
-  \frac{4.16 - 1}{2} \cdot
+  \frac{4.10 + 1}{2} +
+  \frac{4.10 - 1}{2} \cdot
   \frac{1}{\sqrt{1 + 12 \cdot \frac{3.91}{6.16}}}
+  \approx 3.087
 ```
+
+```math
+t_d = \frac{\sqrt{3.087}}{3 \times 10^8}
+    \approx 5.86 \, \text{ps/mm}
+```
+
+---
+
+#### Stripline Example (Routing on L3)
+
+If routing on **L3**, the return planes are **L2 (above)** and **L4 (below)**.
+
+- Dielectric above trace: Core 3313 → `ε_r1 = 4.10`, `h₁ = 0.550 mm`
+- Dielectric below trace: Prepreg 2116 → `ε_r2 = 4.16`, `h₂ = 0.1088 mm`
 
 ```math
 \varepsilon_{\text{eff}} =
-  \approx 3.12
+  \frac{4.10 \cdot 0.550 + 4.16 \cdot 0.1088}{0.550 + 0.1088}
+  \approx 4.112
 ```
 
 ```math
-t_d = \frac{\sqrt{3.12}}{3 \times 10^8}
-    \approx 5.89 \times 10^{-9} \text{ s/m}
+t_d = \frac{\sqrt{4.112}}{3 \times 10^8}
+    \approx 6.77 \, \text{ps/mm}
 ```
 
-<br>
+---
 
-```math
-t_d \approx 5.89 \, \text{ps/mm}
+### Summary
 
-```
-
-```math
-t_d \approx 6.8 \, \text{ps/mm}
-```
-
-<br>
-
-#### Stripline Example
-
-FIXME: wrong values!!!!
-
-For example, JLC06161H-3313, a common 6 layer controlled impedance stackup
-at JLCPCB has a dielectric constant of 4.16.
-
-therefore:
-
-```math
-\varepsilon_{\text{eff}} = \varepsilon_r = 4.16
-```
-
-```math
-t_d = \frac{\sqrt{\varepsilon_{\text{eff}}}}{c}
-```
-
-```math
-t_d = \frac{\sqrt{4.16}}{3 \times 10^8}
-     \approx 6.799 \times 10^{-9} \text{ s/m}
-```
-
-<br>
+| Geometry           | ε_eff | Delay (ps/mm) |
+|--------------------|--------|----------------|
+| Microstrip (L1)    | 3.087  | 5.86           |
+| Stripline (L3)     | 4.112  | 6.77           |
 
 >[!Note]
-> For this stackup, and trace geometry, stripline is roughly 15% slower than
-> microstrip.
+> For this stackup and trace geometry, stripline propagation is approximately
+> 15% slower than microstrip.
 
-#### Propagation Delay to Length
+---
+
+### Propagation Delay to Length
 
 The user provides the dielectric constant, prepeg height, and trace width.
 The formulas defined above are used to calculate the propagation delay and
@@ -307,5 +306,3 @@ Where:
 - ℓ: equivalent PCB track length for the die to pad delay
 - t: die to pad delay computed using the LC Delay Approximation
 - t_d: propagation delay computed from stackup and trace geometry
-
-#### Example 6-layer Stack-up
