@@ -146,7 +146,9 @@ Where:
 #### Microstrip
 
 The effective dielectric constant `ε_eff` for a microstrip (air above,
-dielectric below) is approximated by:
+dielectric below) is approximated by[^3]:
+
+[^3]: <https://en.wikipedia.org/wiki/Microstrip#Characteristic_impedance>
 
 ```math
 \varepsilon_{\text{eff}} =
@@ -205,9 +207,9 @@ FIXME: wrong values!!!!
 
 Given the same JLCPCB JLC06161H-3313 stackup used above, a 4.16 dielectric
 constant, a prepreg thickness of 3.91mil, and a trace width of
-6.16mil[^3], we have:
+6.16mil[^4], we have:
 
-[^3]: This is the trace width for a 50ohm impedance for this stackup, per
+[^4]: This is the trace width for a 50ohm impedance for this stackup, per
 the JLCPCB impedance calculator.
 
 ```math
