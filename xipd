@@ -34,29 +34,50 @@ def parse_args():
         help="Path to the Vivado package file (e.g., 'pkgs/xc7a50tfgg484-1.pkg')",
     )
 
-    # PCB stack-up parameters for length calculation
-    length_group = parser.add_argument_group(
-        "PCB Stack-up Parameters for Length Calculation"
-    )
-    length_group.add_argument(
-        "--dielectric-constant",
-        "-d",
+    # Microstrip parameters
+    microstrip_group = parser.add_argument_group("Microstrip Parameters")
+    microstrip_group.add_argument(
+        "--microstrip-er",
         type=float,
-        help="Dielectric constant (εr) of the PCB substrate",
+        help="Dielectric constant (εr) of the microstrip substrate",
     )
-    length_group.add_argument(
-        "--prepreg-height",
-        "-p",
+    microstrip_group.add_argument(
+        "--microstrip-h",
         type=float,
-        help="Height of prepreg (distance from trace to reference plane) - use same units as trace width",
+        help="Height of microstrip dielectric (distance from trace to reference plane)",
     )
-    length_group.add_argument(
+    microstrip_group.add_argument(
         "--trace-width",
         "-w",
         type=float,
-        help="Width of the microstrip trace - use same units as prepreg height",
+        help="Width of the microstrip trace - use same units as microstrip-h",
     )
-    length_group.add_argument(
+
+    # Stripline parameters
+    stripline_group = parser.add_argument_group("Stripline Parameters")
+    stripline_group.add_argument(
+        "--stripline-er1",
+        type=float,
+        help="Dielectric constant (εr1) of dielectric above the stripline trace",
+    )
+    stripline_group.add_argument(
+        "--stripline-er2",
+        type=float,
+        help="Dielectric constant (εr2) of dielectric below the stripline trace",
+    )
+    stripline_group.add_argument(
+        "--stripline-h1",
+        type=float,
+        help="Distance from center of trace to upper reference plane (h1)",
+    )
+    stripline_group.add_argument(
+        "--stripline-h2",
+        type=float,
+        help="Distance from center of trace to lower reference plane (h2)",
+    )
+
+    # Output parameters
+    parser.add_argument(
         "--output-units",
         "-o",
         choices=["mm", "mils"],
@@ -94,12 +115,19 @@ def convert_length_units(value, from_unit, to_unit):
         return value_mm  # Already in mm
 
 
-def calculate_stripline_effective_dielectric(er):
-    """Calculate effective dielectric constant for stripline.
+def calculate_stripline_effective_dielectric(er1, er2, h1, h2):
+    """Calculate effective dielectric constant for stripline using weighted average.
 
-    For stripline, effective dielectric constant equals the substrate's dielectric constant.
+    Args:
+        er1: Dielectric constant of material above the trace
+        er2: Dielectric constant of material below the trace
+        h1: Distance from center of trace to upper reference plane
+        h2: Distance from center of trace to lower reference plane
+
+    Returns:
+        Effective dielectric constant for stripline
     """
-    return er
+    return (er1 * h1 + er2 * h2) / (h1 + h2)
 
 
 def calculate_microstrip_effective_dielectric(er, h, w):
@@ -283,27 +311,44 @@ def main():
     microstrip_delay = None
 
     # Check if PCB stack-up parameters are provided for length calculations
-    required_params = {"dielectric-constant", "prepreg-height", "trace-width"}
-    provided_params = set()
+    microstrip_params = {"microstrip-er", "microstrip-h", "trace-width"}
+    stripline_params = {
+        "stripline-er1",
+        "stripline-er2",
+        "stripline-h1",
+        "stripline-h2",
+    }
 
-    if args.dielectric_constant is not None:
-        provided_params.add("dielectric-constant")
-    if args.prepreg_height is not None:
-        provided_params.add("prepreg-height")
+    provided_microstrip = set()
+    provided_stripline = set()
+
+    if args.microstrip_er is not None:
+        provided_microstrip.add("microstrip-er")
+    if args.microstrip_h is not None:
+        provided_microstrip.add("microstrip-h")
     if args.trace_width is not None:
-        provided_params.add("trace-width")
+        provided_microstrip.add("trace-width")
 
-    # Check for partial parameters (some provided but not all)
-    if 0 < len(provided_params) < len(required_params):
-        # Some parameters provided but not all - show error
-        missing_params = required_params - provided_params
+    if args.stripline_er1 is not None:
+        provided_stripline.add("stripline-er1")
+    if args.stripline_er2 is not None:
+        provided_stripline.add("stripline-er2")
+    if args.stripline_h1 is not None:
+        provided_stripline.add("stripline-h1")
+    if args.stripline_h2 is not None:
+        provided_stripline.add("stripline-h2")
+
+    # Check for partial parameters
+    microstrip_complete = len(provided_microstrip) == len(microstrip_params)
+    stripline_complete = len(provided_stripline) == len(stripline_params)
+    microstrip_partial = 0 < len(provided_microstrip) < len(microstrip_params)
+    stripline_partial = 0 < len(provided_stripline) < len(stripline_params)
+
+    if microstrip_partial:
+        missing_params = microstrip_params - provided_microstrip
         missing_args = [f"--{param}" for param in missing_params]
         print(
-            "\nError: Incomplete stack-up and geometry information.",
-            file=sys.stderr,
-        )
-        print(
-            "Either provide ALL stack-up and geometry parameters or none at all.",
+            "\nError: Incomplete microstrip parameters.",
             file=sys.stderr,
         )
         print(
@@ -312,37 +357,78 @@ def main():
         )
         return 1
 
-    if len(provided_params) == len(required_params):
+    if stripline_partial:
+        missing_params = stripline_params - provided_stripline
+        missing_args = [f"--{param}" for param in missing_params]
+        print(
+            "\nError: Incomplete stripline parameters.",
+            file=sys.stderr,
+        )
+        print(
+            f"Missing: {', '.join(missing_args)}",
+            file=sys.stderr,
+        )
+        return 1
+
+    if not microstrip_complete and not stripline_complete:
+        calculate_lengths = False
+    else:
         calculate_lengths = True
 
         # Calculate effective dielectric constants
-        stripline_eff_er = calculate_stripline_effective_dielectric(
-            args.dielectric_constant
-        )
-        microstrip_eff_er = calculate_microstrip_effective_dielectric(
-            args.dielectric_constant, args.prepreg_height, args.trace_width
-        )
+        stripline_eff_er = None
+        microstrip_eff_er = None
+
+        if stripline_complete:
+            stripline_eff_er = calculate_stripline_effective_dielectric(
+                args.stripline_er1,
+                args.stripline_er2,
+                args.stripline_h1,
+                args.stripline_h2,
+            )
+
+        if microstrip_complete:
+            microstrip_eff_er = calculate_microstrip_effective_dielectric(
+                args.microstrip_er, args.microstrip_h, args.trace_width
+            )
 
         # Calculate propagation delays
-        stripline_delay = calculate_propagation_delay(stripline_eff_er)
-        microstrip_delay = calculate_propagation_delay(microstrip_eff_er)
+        if stripline_complete:
+            stripline_delay = calculate_propagation_delay(stripline_eff_er)
+
+        if microstrip_complete:
+            microstrip_delay = calculate_propagation_delay(microstrip_eff_er)
 
         # Always display propagation delay in ps/mm regardless of output units
-        propagation_unit = "ps"
         # Convert from s/m to ps/mm
-        stripline_delay_mm = stripline_delay * 1e12 / 1000  # ps/mm
-        microstrip_delay_mm = microstrip_delay * 1e12 / 1000  # ps/mm
+        stripline_delay_mm = None
+        microstrip_delay_mm = None
+
+        if stripline_delay is not None:
+            stripline_delay_mm = stripline_delay * 1e12 / 1000  # ps/mm
+        if microstrip_delay is not None:
+            microstrip_delay_mm = microstrip_delay * 1e12 / 1000  # ps/mm
 
         # Print stack-up information
         print(f"\nPCB Stack-up Parameters:")
-        print(f"  Dielectric Constant (εr): {args.dielectric_constant:.2f}")
-        print(f"  Prepreg Height: {args.prepreg_height:.2f}")
-        print(f"  Trace Width: {args.trace_width:.2f}")
-        print(f"  Height/Width Ratio: {args.prepreg_height/args.trace_width:.3f}")
-        print(f"  Effective Dielectric (Stripline): {stripline_eff_er:.2f}")
-        print(f"  Effective Dielectric (Microstrip): {microstrip_eff_er:.2f}")
-        print(f"  Propagation Delay (Stripline): {stripline_delay_mm:.4f} ps/mm")
-        print(f"  Propagation Delay (Microstrip): {microstrip_delay_mm:.4f} ps/mm")
+
+        if microstrip_complete:
+            print(f"  Microstrip Parameters:")
+            print(f"    Dielectric Constant (εr): {args.microstrip_er:.2f}")
+            print(f"    Height: {args.microstrip_h:.2f}")
+            print(f"    Trace Width: {args.trace_width:.2f}")
+            print(f"    Height/Width Ratio: {args.microstrip_h/args.trace_width:.3f}")
+            print(f"    Effective Dielectric: {microstrip_eff_er:.2f}")
+            print(f"    Propagation Delay: {microstrip_delay_mm:.4f} ps/mm")
+
+        if stripline_complete:
+            print(f"  Stripline Parameters:")
+            print(f"    Dielectric Constant Above (εr1): {args.stripline_er1:.2f}")
+            print(f"    Dielectric Constant Below (εr2): {args.stripline_er2:.2f}")
+            print(f"    Height Above (h1): {args.stripline_h1:.2f}")
+            print(f"    Height Below (h2): {args.stripline_h2:.2f}")
+            print(f"    Effective Dielectric: {stripline_eff_er:.2f}")
+            print(f"    Propagation Delay: {stripline_delay_mm:.4f} ps/mm")
 
     # Print pin data with delay and other information
     print("\n")
@@ -357,28 +443,34 @@ def main():
 
     # Add columns for length calculations if parameters provided
     if calculate_lengths:
-        col7_width = 12  # Stripline Length
-        col8_width = 12  # Microstrip Length
+        col_width = 12  # Column width for length calculations
 
-        # Print header row 1 - column names
+        # Build header dynamically based on available calculations
         site_header = "Site Type"
-        header1 = (
-            f"{'Pin':<{col1_width}}"
-            f"{'Bank':<{col2_width}}"
-            f"{site_header:<{max_site_type_length}}  "
-            f"{'Delay':>{col4_width}}"
-            f"{'Microstrip':>{col7_width}}"
-            f"{'Stripline':>{col8_width}}"
-        )
-        # Print header row 2 - units
-        header2 = (
-            f"{'':<{col1_width}}"
-            f"{'':<{col2_width}}"
-            f"{'':<{max_site_type_length}}  "
-            f"{'(ps)':>{col4_width}}"
-            f"{'(' + args.output_units + ')':>{col7_width}}"
-            f"{'(' + args.output_units + ')':>{col8_width}}"
-        )
+        header1_parts = [
+            f"{'Pin':<{col1_width}}",
+            f"{'Bank':<{col2_width}}",
+            f"{site_header:<{max_site_type_length}}  ",
+            f"{'Delay':>{col4_width}}",
+        ]
+        header2_parts = [
+            f"{'':<{col1_width}}",
+            f"{'':<{col2_width}}",
+            f"{'':<{max_site_type_length}}  ",
+            f"{'(ps)':>{col4_width}}",
+        ]
+
+        if microstrip_complete:
+            header1_parts.append(f"{'Microstrip':>{col_width}}")
+            header2_parts.append(f"{'(' + args.output_units + ')':>{col_width}}")
+
+        if stripline_complete:
+            header1_parts.append(f"{'Stripline':>{col_width}}")
+            header2_parts.append(f"{'(' + args.output_units + ')':>{col_width}}")
+
+        header1 = "".join(header1_parts)
+        header2 = "".join(header2_parts)
+
         print(header1)
         print(header2)
         print("-" * len(header1))
@@ -427,33 +519,34 @@ def main():
 
         if avg_delay is not None:
             if calculate_lengths:
-                # Calculate equivalent lengths
-                stripline_length = calculate_trace_length(
-                    avg_delay, stripline_delay, args.output_units
-                )
-                microstrip_length = calculate_trace_length(
-                    avg_delay, microstrip_delay, args.output_units
-                )
+                # Build output line dynamically
+                line_parts = [
+                    f"{pin:<{col1_width}}",
+                    f"{bank:<{col2_width}}",
+                    f"{site_type:<{max_site_type_length}}  ",
+                    f"{avg_delay:>{col4_width}.2f}",
+                ]
 
-                # Format lengths based on output units - 4 decimal places for mm, 1 for mils
-                if args.output_units == "mm":
-                    print(
-                        f"{pin:<{col1_width}}"
-                        f"{bank:<{col2_width}}"
-                        f"{site_type:<{max_site_type_length}}  "
-                        f"{avg_delay:>{col4_width}.2f}"
-                        f"{microstrip_length:>{col7_width}.4f}"
-                        f"{stripline_length:>{col8_width}.4f}"
+                # Calculate equivalent lengths for available configurations
+                if microstrip_complete:
+                    microstrip_length = calculate_trace_length(
+                        avg_delay, microstrip_delay, args.output_units
                     )
-                else:
-                    print(
-                        f"{pin:<{col1_width}}"
-                        f"{bank:<{col2_width}}"
-                        f"{site_type:<{max_site_type_length}}  "
-                        f"{avg_delay:>{col4_width}.2f}"
-                        f"{microstrip_length:>{col7_width}.1f}"
-                        f"{stripline_length:>{col8_width}.1f}"
+                    if args.output_units == "mm":
+                        line_parts.append(f"{microstrip_length:>{col_width}.4f}")
+                    else:
+                        line_parts.append(f"{microstrip_length:>{col_width}.1f}")
+
+                if stripline_complete:
+                    stripline_length = calculate_trace_length(
+                        avg_delay, stripline_delay, args.output_units
                     )
+                    if args.output_units == "mm":
+                        line_parts.append(f"{stripline_length:>{col_width}.4f}")
+                    else:
+                        line_parts.append(f"{stripline_length:>{col_width}.1f}")
+
+                print("".join(line_parts))
             else:
                 print(
                     f"{pin:<{col1_width}}"
@@ -463,14 +556,21 @@ def main():
                 )
         else:
             if calculate_lengths:
-                print(
-                    f"{pin:<{col1_width}}"
-                    f"{bank:<{col2_width}}"
-                    f"{site_type:<{max_site_type_length}}  "
-                    f"{'N/A':>{col4_width}}"
-                    f"{'N/A':>{col7_width}}"
-                    f"{'N/A':>{col8_width}}"
-                )
+                # Build N/A line dynamically
+                line_parts = [
+                    f"{pin:<{col1_width}}",
+                    f"{bank:<{col2_width}}",
+                    f"{site_type:<{max_site_type_length}}  ",
+                    f"{'N/A':>{col4_width}}",
+                ]
+
+                if microstrip_complete:
+                    line_parts.append(f"{'N/A':>{col_width}}")
+
+                if stripline_complete:
+                    line_parts.append(f"{'N/A':>{col_width}}")
+
+                print("".join(line_parts))
             else:
                 print(
                     f"{pin:<{col1_width}}"
