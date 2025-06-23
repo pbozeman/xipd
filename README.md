@@ -247,3 +247,30 @@ Where:
 - ℓ: equivalent PCB track length for the die to pad delay
 - t: die to pad delay computed using the LC Delay Approximation
 - t_d: propagation delay computed from stackup and trace geometry
+
+#### Example 6-layer Stack-up
+
+The examples above use the following 6-layer stackup from JLCPCB:
+
+| Layer   | Material                    | Thickness (mil) | Thickness (mm) |
+| ------- | --------------------------- | --------------- | -------------- |
+| L1      | Outer Copper Weight 1 oz    | 1.38            | 0.0350         |
+| Prepreg | 3313 RC57%                  | 3.91            | 0.0994         |
+| L2      | Inner Copper Weight         | 0.60            | 0.0152         |
+| Core    | 0.55 mm H (no copper)       | 21.65           | 0.5500         |
+| L3      | Inner Copper Weight         | 0.60            | 0.0152         |
+| Prepreg | 2116 RC54%                  | 4.28            | 0.1088         |
+| L4      | Inner Copper Weight         | 0.60            | 0.0152         |
+| Core    | 0.55 mm H (no copper)       | 21.65           | 0.5500         |
+| L5      | Inner Copper Weight         | 0.60            | 0.0152         |
+| Prepreg | 3313 RC57%                  | 3.91            | 0.0994         |
+| L6      | Outer Copper Weight 1 oz    | 1.38            | 0.0350         |
+
+Refer to JLCPCB’s impedance calculator for these values: <https://jlcpcb.com/impedance>
+
+| Prepreg Type | Dielectric Constant |
+| ------------ | ------------------- |
+| 7628         | 4.4                 |
+| 3313         | 4.1                 |
+| 1080         | 3.91                |
+| 2116         | 4.16                |
