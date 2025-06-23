@@ -167,11 +167,33 @@ Where:
 #### Stripline
 
 In a stripline (a trace fully embedded in dielectric), the electromagnetic
-fields are entirely contained within the dielectric. So:
+fields are contained entirely within the dielectric. If the dielectric above
+and below the trace is the same, and the trace is centered, then:
 
 ```math
 \varepsilon_{\text{eff}} = \varepsilon_r
 ```
+
+Where `ε_r` is the relative permittivity of the dielectric.
+
+However, if the trace is off-center or the dielectrics above and below differ,
+a better approximation is:
+
+```math
+\varepsilon_{\text{eff}} =
+  \frac{\varepsilon_{r1} \cdot h_1 + \varepsilon_{r2} \cdot h_2}
+       {h_1 + h_2}
+```
+
+Where:
+
+- `ε_r1` = Relative permittivity of the dielectric **above** the trace
+- `ε_r2` = Relative permittivity of the dielectric **below** the trace
+- `h₁` = Distance from the **center of the trace to the upper reference plane**
+- `h₂` = Distance from the **center of the trace to the lower reference plane**
+
+This is a weighted average of the permittivities, accounting for unequal
+dielectric regions surrounding the trace.
 
 ### Example Delays for JLCPCB 6 Layer stackup
 
