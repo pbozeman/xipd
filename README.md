@@ -3,10 +3,11 @@
 Compute package delays for Xilinx chips from exported Vivado pkg files,
 including converting delays to lengths that can be used in KiCad track tuning.[^1]
 
-[^1]: The first version of this utility parsed the Xilinx Ibis files. The utility name was therefor **X**ilinx **I**BIS **P**ackage **D**elay. It now computes
-trace delays off of Vivado exports. Vivado model the delays slightly
-differently, and presumably, more accurately.
-This is now the **XI**linx **P**ackage **D**elay utility.
+[^1]: The first version of this utility parsed the Xilinx Ibis files.
+The utility name was therefor **X**ilinx **I**BIS **P**ackage **D**elay.
+It now computes trace delays using Vivado exports. Vivado models the delays
+slightly differently, and presumably, more accurately.
+This is now the **Xi**linx **P**ackage **D**elay utility.
 
 For the microstrip use case, run the tool multiple times if different trace
 widths are needed, e.g. 50ohm for DDR3 and 100ohm differential pairs for
@@ -39,11 +40,14 @@ Run xipd with the exported package and supply your stackup and trace geometry.
 Example:
 
 ```bash
-./xipd pkgs/xc7a50tfgg484-1.pkg \
-     --dielectric-constant 4.16 \
-     --prepreg-height 3.91      \
-     --trace-width 3.68         \
-     --output-units mils
+❯ ./xipd pkgs/xc7a50tfgg484-1.pkg \
+       --microstrip-er   4.1      \
+       --microstrip-h    3.91     \
+       --microstrip-w    6.16     \
+       --stripline-er1   4.6      \
+       --stripline-h1   21.65     \
+       --stripline-er2   4.16     \
+       --stripline-h2    4.28
 ```
 
 Results:
@@ -53,25 +57,35 @@ Processing package file: pkgs/xc7a50tfgg484-1.pkg
 Found 484 pins in the package file
 
 PCB Stack-up Parameters:
-  Dielectric Constant (εr): 4.16
-  Prepreg Height: 3.91
-  Trace Width: 3.68
-  Height/Width Ratio: 1.062
-  Effective Dielectric (Stripline): 4.16
-  Effective Dielectric (Microstrip): 3.01
-  Propagation Delay (Stripline): 6.80 ps/mm
-  Propagation Delay (Microstrip): 5.78 ps/mm
+  Microstrip Parameters:
+    Dielectric Constant (εr): 4.10
+    Height: 3.91
+    Trace Width: 6.16
+    Height/Width Ratio: 0.635
+    Effective Dielectric: 3.08
+    Propagation Delay: 5.8522 ps/mm
+  Stripline Parameters:
+    Dielectric Constant Above (εr1): 4.60
+    Dielectric Constant Below (εr2): 4.16
+    Height Above (h1): 21.65
+    Height Below (h2): 4.28
+    Effective Dielectric: 4.53
+    Propagation Delay: 7.0975 ps/mm
 
-Pin Data:
 
-Pin       Bank      Site Type                          Delay   Microstrip  Stripline
+Pin       Bank      Site Type                          Delay  Microstrip   Stripline
                                                         (ps)      (mils)      (mils)
 ------------------------------------------------------------------------------------
-A1        35        IO_L1N_T0_AD4N_35                 128.17       872.5       741.7
+A1        35        IO_L1N_T0_AD4N_35                 128.17       862.3       711.0
 A2        N/A       GND                                  N/A         N/A         N/A
 A3        N/A       GND                                  N/A         N/A         N/A
-A4        216       MGTPTXN0_216                       94.66       644.4       547.8
+A4        216       MGTPTXN0_216                       94.66       636.8       525.1
 A5        N/A       GND                                  N/A         N/A         N/A
+A6        216       MGTPTXN2_216                       76.13       512.2       422.3
+A7        N/A       GND                                  N/A         N/A         N/A
+A8        216       MGTPRXN0_216                       69.15       465.2       383.6
+A9        N/A       GND                                  N/A         N/A         N/A
+A10       216       MGTPRXN2_216                       70.22       472.4       389.5
 ...
 ```
 
@@ -93,7 +107,7 @@ constant, and differs for microstrip vs stripline. This tool also optionally
 takes a dielectric constant as input and computes the delay in terms of length
 in addition to time. [^2]
 
-[^2]: This also means its difficult, if not impossible, to do multi layer
+[^2]: This also means it is difficult, if not impossible, to do multi layer
 delay matching in KiCad. It appears that KiCad is changing to time based
 delay matching, see: <https://gitlab.com/kicad/code/kicad/merge_requests/2212>.
 However, as I understand the KiCad release schedule, this won't be available
@@ -192,7 +206,7 @@ a better approximation is:
        {h_1 + h_2}
 ```
 
-Where:
+Where:[^4]
 
 - `ε_r1` = Relative permittivity of the dielectric **above** the trace
 - `ε_r2` = Relative permittivity of the dielectric **below** the trace
@@ -201,6 +215,9 @@ Where:
 
 This is a weighted average of the permittivities, accounting for unequal
 dielectric regions surrounding the trace.
+
+[^4]: The order of ε_r1,h₁ and ε_r2,h₂ does not actually matter as long
+as each dielectric constant is paired with the correct thickness.
 
 ---
 
@@ -232,6 +249,10 @@ Dielectric constants for JLCPCB prepreg and cores:
 | 1080         | 3.91                |
 | 2116         | 4.16                |
 
+| Core Dielectric Constant |
+| ------------------------ |
+| 4.6                      |
+
 ---
 
 #### Microstrip Example (Routing on L1)
@@ -262,32 +283,33 @@ t_d = \frac{\sqrt{3.087}}{3 \times 10^8}
 
 If routing on **L3**, the return planes are **L2 (above)** and **L4 (below)**.
 
-- Dielectric above trace: Core 3313 → `ε_r1 = 4.10`, `h₁ = 0.550 mm`
-- Dielectric below trace: Prepreg 2116 → `ε_r2 = 4.16`, `h₂ = 0.1088 mm`
+- Dielectric above trace: Core 3313 → `ε_r1 = 4.6`, `h₁ = 21.65 mil`
+- Dielectric below trace: Prepreg 2116 → `ε_r2 = 4.16`, `h₂ = 4.28 mil`
 
 ```math
 \varepsilon_{\text{eff}} =
-  \frac{4.10 \cdot 0.550 + 4.16 \cdot 0.1088}{0.550 + 0.1088}
-  \approx 4.112
+  \frac{4.16 \cdot 4.28 + 4.6 \cdot 21.65}{4.28 + 21.65}
+  = \frac{17.8048 + 99.59}{25.93}
+  \approx 4.521
 ```
 
 ```math
-t_d = \frac{\sqrt{4.112}}{3 \times 10^8}
-    \approx 6.77 \, \text{ps/mm}
+t_d = \frac{\sqrt{4.521}}{3 \times 10^8}
+    \approx 7.10 \, \text{ps/mm}
 ```
 
 ---
 
 ### Summary
 
-| Geometry           | ε_eff | Delay (ps/mm) |
+| Geometry           | ε_eff  | Delay (ps/mm) |
 |--------------------|--------|----------------|
 | Microstrip (L1)    | 3.087  | 5.86           |
-| Stripline (L3)     | 4.112  | 6.77           |
+| Stripline (L3)     | 4.524  | 7.10           |
 
->[!Note]
+> [!Note]
 > For this stackup and trace geometry, stripline propagation is approximately
-> 15% slower than microstrip.
+> **21% slower** than microstrip.
 
 ---
 
