@@ -47,7 +47,7 @@ def parse_args():
         help="Height of microstrip dielectric (distance from trace to reference plane)",
     )
     microstrip_group.add_argument(
-        "--trace-width",
+        "--microstrip-w",
         "-w",
         type=float,
         help="Width of the microstrip trace - use same units as microstrip-h",
@@ -311,7 +311,7 @@ def main():
     microstrip_delay = None
 
     # Check if PCB stack-up parameters are provided for length calculations
-    microstrip_params = {"microstrip-er", "microstrip-h", "trace-width"}
+    microstrip_params = {"microstrip-er", "microstrip-h", "microstrip-w"}
     stripline_params = {
         "stripline-er1",
         "stripline-er2",
@@ -326,8 +326,8 @@ def main():
         provided_microstrip.add("microstrip-er")
     if args.microstrip_h is not None:
         provided_microstrip.add("microstrip-h")
-    if args.trace_width is not None:
-        provided_microstrip.add("trace-width")
+    if args.microstrip_w is not None:
+        provided_microstrip.add("microstrip-w")
 
     if args.stripline_er1 is not None:
         provided_stripline.add("stripline-er1")
@@ -389,7 +389,7 @@ def main():
 
         if microstrip_complete:
             microstrip_eff_er = calculate_microstrip_effective_dielectric(
-                args.microstrip_er, args.microstrip_h, args.trace_width
+                args.microstrip_er, args.microstrip_h, args.microstrip_w
             )
 
         # Calculate propagation delays
@@ -416,8 +416,8 @@ def main():
             print(f"  Microstrip Parameters:")
             print(f"    Dielectric Constant (εr): {args.microstrip_er:.2f}")
             print(f"    Height: {args.microstrip_h:.2f}")
-            print(f"    Trace Width: {args.trace_width:.2f}")
-            print(f"    Height/Width Ratio: {args.microstrip_h/args.trace_width:.3f}")
+            print(f"    Trace Width: {args.microstrip_w:.2f}")
+            print(f"    Height/Width Ratio: {args.microstrip_h/args.microstrip_w:.3f}")
             print(f"    Effective Dielectric: {microstrip_eff_er:.2f}")
             print(f"    Propagation Delay: {microstrip_delay_mm:.4f} ps/mm")
 
